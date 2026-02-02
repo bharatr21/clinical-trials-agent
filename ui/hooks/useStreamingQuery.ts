@@ -80,9 +80,10 @@ export function useStreamingQuery(): UseStreamingQueryReturn {
       try {
         let result: StreamResult | null = null;
 
-        for await (const event of streamQuery(question, conversationId)) {
+        const signal = abortControllerRef.current.signal;
+        for await (const event of streamQuery(question, conversationId, signal)) {
           // Check if cancelled
-          if (abortControllerRef.current?.signal.aborted) {
+          if (signal.aborted) {
             break;
           }
 

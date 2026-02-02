@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     langsmith_project: str = "clinical-trials-agent"
 
     # API settings
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"
     api_port: int = 8000
 
     # Application database (local PostgreSQL for state persistence)
