@@ -2,7 +2,7 @@
 
 import { streamQuery } from "@/lib/api";
 import type { StreamEvent } from "@/types";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseStreamingQueryReturn {
   /** Whether a query is currently streaming */
@@ -60,6 +60,15 @@ export function useStreamingQuery(): UseStreamingQueryReturn {
     setIsStreaming(false);
   }, []);
 
+  // Cleanup on unmount to abort any in-flight streams
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   const executeQuery = useCallback(
     async (
       question: string,
@@ -107,6 +116,7 @@ export function useStreamingQuery(): UseStreamingQueryReturn {
             const errorMsg = event.message || "An error occurred";
             setError(errorMsg);
             callbacks?.onError?.(errorMsg, event.code);
+            break;
           }
         }
 

@@ -24,10 +24,12 @@ def _get_llm(
     settings = get_settings()
     user_key = config.get("configurable", {}).get("openai_api_key") if config else None
 
+    # Use server key by default, switch to user key on fallback (after rate limit)
     if use_fallback and user_key:
         logger.info("Using user-provided OpenAI API key (fallback)")
-
-    api_key = user_key if (use_fallback and user_key) else settings.openai_api_key
+        api_key = user_key
+    else:
+        api_key = settings.openai_api_key
 
     return ChatOpenAI(
         model=settings.openai_model,
@@ -37,22 +39,28 @@ def _get_llm(
 
 
 def _invoke_with_fallback(llm_func, config: RunnableConfig | None = None):
-    """Invoke an LLM function with automatic fallback on rate limit errors."""
+    """Invoke an LLM function with automatic fallback on rate limit errors.
+
+    If user provided an API key, use it directly (skip server key).
+    Otherwise, use server key and fall back to user key on rate limit.
+    """
     from openai import RateLimitError
 
+    user_key = config.get("configurable", {}).get("openai_api_key") if config else None
+
+    # If user provided a key, use it directly (they likely hit rate limit before)
+    if user_key:
+        logger.info("Using user-provided OpenAI API key")
+        llm = _get_llm(config, use_fallback=True)
+        return llm_func(llm)
+
+    # Otherwise try server key, with no fallback available
     try:
         llm = _get_llm(config, use_fallback=False)
         return llm_func(llm)
     except RateLimitError:
-        user_key = (
-            config.get("configurable", {}).get("openai_api_key") if config else None
-        )
-        if not user_key:
-            logger.error("Server API key rate limited and no user key available")
-            raise
-        logger.warning("Server API key rate limited, falling back to user-provided key")
-        llm = _get_llm(config, use_fallback=True)
-        return llm_func(llm)
+        logger.error("Server API key rate limited and no user key available")
+        raise
 
 
 def create_list_tables_node(list_tables_tool: BaseTool):
