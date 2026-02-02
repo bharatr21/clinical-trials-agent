@@ -112,6 +112,9 @@ export function useStreamingQuery(): UseStreamingQueryReturn {
 
         return result;
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return null;
+        }
         const errorMsg = err instanceof Error ? err.message : "An error occurred";
         setError(errorMsg);
         callbacks?.onError?.(errorMsg);
