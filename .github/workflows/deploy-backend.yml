@@ -8,6 +8,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'pyproject.toml'
+      - 'uv.lock'
       - 'ruff.toml'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:

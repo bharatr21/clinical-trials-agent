@@ -4,7 +4,9 @@
     "builder": "RAILPACK",
     "buildCommand": "uv sync",
     "watchPatterns": [
-      "/src/**"
+      "/src/**",
+      "pyproject.toml",
+      "uv.lock"
     ],
     "buildEnvironment": "V3"
   },
@@ -24,6 +26,7 @@
         "numReplicas": 1
       }
     },
+    "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
