@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # API settings
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    cors_origins: str = "https://clinical-trials-agent.vercel.app"
 
     # Application database (local PostgreSQL for state persistence)
     app_db_host: str = "localhost"

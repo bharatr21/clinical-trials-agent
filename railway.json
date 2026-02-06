@@ -1,0 +1,33 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "uv sync",
+    "watchPatterns": [
+      "/src/**",
+      "pyproject.toml",
+      "uv.lock"
+    ],
+    "buildEnvironment": "V3"
+  },
+  "deploy": {
+    "runtime": "V2",
+    "numReplicas": 1,
+    "startCommand": "cd src/clinical_trials_agent && uv run alembic upgrade head && uv run uvicorn clinical_trials_agent.api.main:app --host 0.0.0.0 --port $PORT",
+    "limitOverride": {
+      "containers": {
+        "cpu": 2
+      }
+    },
+    "sleepApplication": false,
+    "useLegacyStacker": false,
+    "multiRegionConfig": {
+      "us-east4-eqdc4a": {
+        "numReplicas": 1
+      }
+    },
+    "healthcheckPath": "/health",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}

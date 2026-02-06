@@ -49,7 +49,7 @@ async function fetchWithClientId(url: string, options: RequestInit = {}): Promis
  */
 export async function queryAgent(
   question: string,
-  conversationId?: string
+  conversationId?: string,
 ): Promise<QueryResponse> {
   const response = await fetchWithClientId(`${API_BASE_URL}/api/v1/query`, {
     method: "POST",
@@ -73,7 +73,7 @@ export async function queryAgent(
 export async function* streamQuery(
   question: string,
   conversationId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const clientId = getClientId();
   const openaiApiKey = getOpenAIApiKey();
@@ -155,10 +155,7 @@ export async function* streamQuery(
 /**
  * Get list of conversations
  */
-export async function getConversations(
-  limit = 50,
-  offset = 0
-): Promise<ConversationListResponse> {
+export async function getConversations(limit = 50, offset = 0): Promise<ConversationListResponse> {
   const params = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
@@ -179,7 +176,7 @@ export async function getConversations(
  */
 export async function getConversation(conversationId: string): Promise<ConversationDetail> {
   const response = await fetchWithClientId(
-    `${API_BASE_URL}/api/v1/conversations/${conversationId}`
+    `${API_BASE_URL}/api/v1/conversations/${conversationId}`,
   );
 
   if (!response.ok) {
@@ -198,7 +195,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
     `${API_BASE_URL}/api/v1/conversations/${conversationId}`,
     {
       method: "DELETE",
-    }
+    },
   );
 
   if (!response.ok) {
