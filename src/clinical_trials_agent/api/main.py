@@ -6,8 +6,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from starlette.requests import Request
 
 from clinical_trials_agent.agent import close_checkpointer, init_checkpointer
+from clinical_trials_agent.api.rate_limit import limiter
 from clinical_trials_agent.api.routes import conversations_router, query_router
 from clinical_trials_agent.config import get_settings
 from clinical_trials_agent.database import close_app_database, init_app_database
@@ -56,6 +60,21 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiting
+app.state.limiter = limiter
+
+
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Return 429 in the same JSON format the frontend expects."""
+    logger.warning(f"Rate limit exceeded: {request.url.path} {exc.detail}")
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "rate_limit"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 # Configure CORS for frontend access
 app.add_middleware(

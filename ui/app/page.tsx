@@ -107,7 +107,15 @@ export default function Home() {
                 >
                   AACT Database
                 </a>{" "}
-                &bull; Data from ClinicalTrials.gov
+                &bull; Data from{" "}
+                <a
+                  href="https://clinicaltrials.gov/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  ClinicalTrials.gov
+                </a>
               </p>
             </footer>
           </div>

@@ -66,8 +66,9 @@ flowchart TB
     end
 
     subgraph Databases["Databases"]
-        AACT[("AACT Database\n(ClinicalTrials.gov)")]
-        AppDB[("Application Database\n(Conversations)")]
+        direction LR
+        AACT[("AACT Database<br/>(ClinicalTrials.gov)")]
+        AppDB[("Application Database<br/>(Conversations)")]
     end
 
     UI --> Backend
@@ -129,10 +130,10 @@ Key tables include: `studies`, `conditions`, `interventions`, `outcomes`, `facil
 - LangGraph (agent orchestration)
 - LangChain (SQL tools and LLM integration)
 - PostgreSQL (conversation persistence via Alembic)
-- OpenAI GPT-4o (LLM)
+- OpenAI GPT-5.2 (LLM)
 
 **Frontend**
-- Next.js 14 (React framework)
+- Next.js 15 (React framework)
 - Tailwind CSS (styling)
 - TypeScript
 - Radix UI (accessible components)
@@ -191,7 +192,7 @@ See `.env.example` for all configuration options:
 | Variable | Description |
 |----------|-------------|
 | `DB_USER` / `DB_PASSWORD` | AACT database credentials |
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4o |
+| `OPENAI_API_KEY` | OpenAI API key for GPT-5.2 |
 | `APP_DB_*` | Local PostgreSQL for conversation storage |
 | `LANGSMITH_API_KEY` | Optional: LangSmith tracing |
 
