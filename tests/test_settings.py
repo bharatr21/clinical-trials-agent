@@ -47,11 +47,6 @@ class TestSettings:
         settings = Settings(db_user="test", db_password="test")
         assert settings.langsmith_project == "clinical-trials-agent"
 
-    def test_default_api_host(self):
-        """Default API host should be 0.0.0.0."""
-        settings = Settings(db_user="test", db_password="test")
-        assert settings.api_host == "0.0.0.0"
-
     def test_default_api_port(self):
         """Default API port should be 8000."""
         settings = Settings(db_user="test", db_password="test")

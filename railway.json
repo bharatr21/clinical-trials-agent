@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "pip install uv && uv sync && cd src/clinical_trials_agent && uv run alembic upgrade head"
+    "buildCommand": "pip install uv && uv sync"
   },
   "deploy": {
-    "startCommand": "uv run uvicorn clinical_trials_agent.api.main:app --host 0.0.0.0 --port $PORT",
+    "startCommand": "cd src/clinical_trials_agent && uv run alembic upgrade head && cd ../.. && uv run uvicorn clinical_trials_agent.api.main:app --host 0.0.0.0 --port $PORT",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
