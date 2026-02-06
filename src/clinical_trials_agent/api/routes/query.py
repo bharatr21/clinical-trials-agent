@@ -318,7 +318,9 @@ async def query_clinical_trials_stream(
                             )
                             if captured_sql and captured_sql != sql_query:
                                 sql_query = captured_sql
-                                logger.info(f"Captured SQL from tool_calls:\n{captured_sql}")
+                                logger.info(
+                                    f"Captured SQL from tool_calls:\n{captured_sql}"
+                                )
                                 yield f"data: {json.dumps({'type': 'sql', 'query': sql_query})}\n\n"
 
                 # Stream content tokens (only from final answer, not intermediate messages)
