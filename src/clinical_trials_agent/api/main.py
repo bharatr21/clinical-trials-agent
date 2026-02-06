@@ -67,6 +67,7 @@ app.state.limiter = limiter
 
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:  # noqa: ARG001
     """Return 429 in the same JSON format the frontend expects."""
+    logger.warning(f"Rate limit exceeded: {request.url.path} {exc.detail}")
     return JSONResponse(
         status_code=429,
         content={"detail": "rate_limit"},

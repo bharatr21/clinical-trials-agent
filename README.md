@@ -192,7 +192,7 @@ See `.env.example` for all configuration options:
 | Variable | Description |
 |----------|-------------|
 | `DB_USER` / `DB_PASSWORD` | AACT database credentials |
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4o |
+| `OPENAI_API_KEY` | OpenAI API key for GPT-5.2 |
 | `APP_DB_*` | Local PostgreSQL for conversation storage |
 | `LANGSMITH_API_KEY` | Optional: LangSmith tracing |
 
