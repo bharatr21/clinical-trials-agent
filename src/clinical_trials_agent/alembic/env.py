@@ -67,6 +67,10 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Ensure base tables exist before running migrations so that
+        # ALTER-based migrations don't fail on a fresh database.
+        target_metadata.create_all(bind=connection)
+
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
