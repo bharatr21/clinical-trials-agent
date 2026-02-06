@@ -5,13 +5,14 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from clinical_trials_agent.agent import create_agent
 from clinical_trials_agent.api.dependencies import get_client_id, get_openai_api_key
+from clinical_trials_agent.api.rate_limit import limiter
 from clinical_trials_agent.database import get_app_db_session
 from clinical_trials_agent.models import Conversation
 
@@ -115,8 +116,10 @@ async def _save_conversation_metadata(
 
 
 @router.post("/query", response_model=QueryResponse)
+@limiter.limit("20/minute")
 async def query_clinical_trials(
-    request: QueryRequest,
+    request: Request,  # noqa: ARG001 — required by slowapi
+    query: QueryRequest,
     client_id: str = Depends(get_client_id),
     openai_api_key: str | None = Depends(get_openai_api_key),
 ) -> QueryResponse:
@@ -133,11 +136,11 @@ async def query_clinical_trials(
     """
     try:
         # Get or create conversation ID
-        is_new_conversation = request.conversation_id is None
-        conversation_id = request.conversation_id or str(uuid.uuid4())
+        is_new_conversation = query.conversation_id is None
+        conversation_id = query.conversation_id or str(uuid.uuid4())
 
         logger.info(
-            f"Processing query: {request.question[:100]}... "
+            f"Processing query: {query.question[:100]}... "
             f"(conversation: {conversation_id}, new: {is_new_conversation}, user_key: {openai_api_key is not None})"
         )
 
@@ -148,13 +151,13 @@ async def query_clinical_trials(
 
         # Run the agent (async invocation with checkpointer)
         result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": request.question}]},
+            {"messages": [{"role": "user", "content": query.question}]},
             config,
         )
 
         # Save conversation metadata
         await _save_conversation_metadata(
-            conversation_id, request.question, client_id, is_new=is_new_conversation
+            conversation_id, query.question, client_id, is_new=is_new_conversation
         )
 
         # Extract the response
@@ -196,8 +199,10 @@ STAGE_LABELS = {
 
 
 @router.post("/query/stream")
+@limiter.limit("20/minute")
 async def query_clinical_trials_stream(
-    request: QueryRequest,
+    request: Request,  # noqa: ARG001 — required by slowapi
+    query: QueryRequest,
     client_id: str = Depends(get_client_id),
     openai_api_key: str | None = Depends(get_openai_api_key),
 ) -> StreamingResponse:
@@ -216,11 +221,11 @@ async def query_clinical_trials_stream(
     X-OpenAI-API-Key header to use instead of the server's default key.
     """
     # Get or create conversation ID
-    is_new_conversation = request.conversation_id is None
-    conversation_id = request.conversation_id or str(uuid.uuid4())
+    is_new_conversation = query.conversation_id is None
+    conversation_id = query.conversation_id or str(uuid.uuid4())
 
     logger.info(
-        f"Streaming query: {request.question[:100]}... "
+        f"Streaming query: {query.question[:100]}... "
         f"(conversation: {conversation_id}, new: {is_new_conversation}, user_key: {openai_api_key is not None})"
     )
 
@@ -238,7 +243,7 @@ async def query_clinical_trials_stream(
 
             # Stream using 'messages' mode for token-by-token output
             async for msg_chunk, metadata in agent.astream(
-                {"messages": [{"role": "user", "content": request.question}]},
+                {"messages": [{"role": "user", "content": query.question}]},
                 config,
                 stream_mode="messages",
             ):
@@ -306,14 +311,14 @@ async def query_clinical_trials_stream(
                             else getattr(tool_call, "args", {})
                         )
                         if name == "sql_db_query":
-                            query = (
+                            captured_sql = (
                                 args.get("query")
                                 if isinstance(args, dict)
                                 else getattr(args, "query", None)
                             )
-                            if query and query != sql_query:
-                                sql_query = query
-                                logger.info(f"Captured SQL from tool_calls:\n{query}")
+                            if captured_sql and captured_sql != sql_query:
+                                sql_query = captured_sql
+                                logger.info(f"Captured SQL from tool_calls:\n{captured_sql}")
                                 yield f"data: {json.dumps({'type': 'sql', 'query': sql_query})}\n\n"
 
                 # Stream content tokens (only from final answer, not intermediate messages)
@@ -343,7 +348,7 @@ async def query_clinical_trials_stream(
 
             # Save conversation metadata
             await _save_conversation_metadata(
-                conversation_id, request.question, client_id, is_new=is_new_conversation
+                conversation_id, query.question, client_id, is_new=is_new_conversation
             )
 
             # Send final event with complete response
