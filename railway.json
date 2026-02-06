@@ -1,12 +1,29 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install uv && uv sync"
+    "builder": "RAILPACK",
+    "buildCommand": "uv sync",
+    "watchPatterns": [
+      "/src/**"
+    ],
+    "buildEnvironment": "V3"
   },
   "deploy": {
-    "startCommand": "cd src/clinical_trials_agent && uv run alembic upgrade head && cd ../.. && uv run uvicorn clinical_trials_agent.api.main:app --host 0.0.0.0 --port $PORT",
-    "healthcheckPath": "/health",
+    "runtime": "V2",
+    "numReplicas": 1,
+    "startCommand": "cd src/clinical_trials_agent && uv run alembic upgrade head && uv run uvicorn clinical_trials_agent.api.main:app --host 0.0.0.0 --port $PORT",
+    "limitOverride": {
+      "containers": {
+        "cpu": 2
+      }
+    },
+    "sleepApplication": false,
+    "useLegacyStacker": false,
+    "multiRegionConfig": {
+      "us-east4-eqdc4a": {
+        "numReplicas": 1
+      }
+    },
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
