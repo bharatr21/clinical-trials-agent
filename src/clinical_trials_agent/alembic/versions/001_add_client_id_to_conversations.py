@@ -19,20 +19,15 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Add client_id column with temporary server_default for backfill
-    op.add_column(
-        "conversations",
-        sa.Column("client_id", sa.String(64), nullable=False, server_default="default"),
+    op.execute(
+        "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS "
+        "client_id VARCHAR(64) NOT NULL DEFAULT 'default'"
     )
-    # Remove server_default so future INSERTs without client_id fail
-    op.alter_column(
-        "conversations",
-        "client_id",
-        server_default=None,
-        nullable=False,
+    op.execute("ALTER TABLE conversations ALTER COLUMN client_id DROP DEFAULT")
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_conversations_client_id "
+        "ON conversations (client_id)"
     )
-    # Create index for efficient filtering by client_id
-    op.create_index("ix_conversations_client_id", "conversations", ["client_id"])
 
 
 def downgrade() -> None:
