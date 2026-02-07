@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
-import { Bot, Check, Copy, Download, Loader2, User } from "lucide-react";
+import { Bot, Check, Copy, Download, User } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -125,9 +125,11 @@ export function MessageBubble({ message, isStreaming = false, currentStage }: Me
         {isUser ? (
           <p className="text-sm break-words">{message.content}</p>
         ) : showStreamingIndicator ? (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{currentStage || "Analyzing your question"}...</span>
+          <div className="flex items-center gap-2.5">
+            <span className="orbit-dots" />
+            <span className="shimmer-text animate-shimmer text-sm font-medium">
+              {currentStage || "Analyzing your question"}...
+            </span>
           </div>
         ) : (
           <>
