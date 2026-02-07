@@ -127,11 +127,10 @@ pre code {
   .prose th,
   .prose td {
     padding: 0.25rem 0.375rem;
-    font-size: 0.625rem;
+    font-size: 0.75rem;
   }
 
-  ::-webkit-scrollbar {
-    width: 4px;
+  .prose table::-webkit-scrollbar {
     height: 4px;
   }
 }

@@ -147,7 +147,7 @@ export function ChatInterface({
   return (
     <Card className="flex-1 flex flex-col overflow-hidden w-full min-h-0">
       <CardContent className="flex-1 p-0 overflow-auto min-h-0">
-        <div className="h-full w-full overflow-auto overflow-x-auto">
+        <div className="h-full w-full overflow-auto">
           <div className="p-4 space-y-4 w-full min-w-0">
             {messages.length === 0 && (
               <div className="text-center py-12">

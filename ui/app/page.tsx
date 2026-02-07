@@ -8,11 +8,20 @@ import { SettingsButton, SettingsDialogProvider } from "@/components/SettingsDia
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useConversation } from "@/hooks/useConversation";
 import { Activity, Database, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
 
   const {
     conversations,
@@ -31,26 +40,23 @@ export default function Home() {
       <TooltipProvider>
         <main className="h-screen flex bg-gradient-to-b from-slate-50 to-white overflow-hidden">
           {/* Sidebar backdrop (mobile only) */}
-          {sidebarOpen && (
-            <div
-              className="fixed inset-0 bg-black/70 z-40 md:hidden"
-              onClick={() => setSidebarOpen(false)}
-              onKeyDown={(e) => e.key === "Escape" && setSidebarOpen(false)}
-            />
-          )}
+          <div
+            className={`fixed inset-0 bg-black/70 z-40 md:hidden transition-opacity ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            onClick={() => setSidebarOpen(false)}
+          />
 
           {/* Sidebar */}
-          {sidebarOpen && (
-            <div className="fixed inset-y-0 left-0 z-50 md:relative md:z-auto">
-              <ConversationSidebar
-                conversations={conversations}
-                currentConversationId={currentConversationId}
-                onNewConversation={newConversation}
-                onSelectConversation={selectConversation}
-                onDeleteConversation={removeConversation}
-              />
-            </div>
-          )}
+          <div
+            className={`fixed inset-y-0 left-0 z-50 md:relative md:z-auto transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden"}`}
+          >
+            <ConversationSidebar
+              conversations={conversations}
+              currentConversationId={currentConversationId}
+              onNewConversation={newConversation}
+              onSelectConversation={selectConversation}
+              onDeleteConversation={removeConversation}
+            />
+          </div>
 
           {/* Main content */}
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
