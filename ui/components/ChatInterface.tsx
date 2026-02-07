@@ -147,7 +147,7 @@ export function ChatInterface({
   return (
     <Card className="flex-1 flex flex-col overflow-hidden w-full min-h-0">
       <CardContent className="flex-1 p-0 overflow-auto min-h-0">
-        <div className="h-full w-full overflow-auto">
+        <div className="h-full w-full overflow-auto overflow-x-auto">
           <div className="p-4 space-y-4 w-full min-w-0">
             {messages.length === 0 && (
               <div className="text-center py-12">
@@ -183,7 +183,7 @@ export function ChatInterface({
             ))}
 
             {error && (
-              <div className="ml-11 bg-destructive/10 text-destructive p-3 rounded-lg text-sm border border-destructive/20">
+              <div className="ml-0 md:ml-11 bg-destructive/10 text-destructive p-3 rounded-lg text-sm border border-destructive/20">
                 {error}
               </div>
             )}
@@ -193,7 +193,7 @@ export function ChatInterface({
         </div>
       </CardContent>
 
-      <CardFooter className="border-t p-4">
+      <CardFooter className="border-t p-2 md:p-4">
         <form onSubmit={handleSubmit} className="flex gap-2 w-full">
           <input
             ref={inputRef}
@@ -201,7 +201,7 @@ export function ChatInterface({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about clinical trials..."
-            className="flex-1 h-10 px-4 rounded-lg border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 h-12 md:h-10 px-3 md:px-4 rounded-lg border border-input bg-background text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isStreaming}
           />
           {isStreaming ? (

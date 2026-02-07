@@ -22,7 +22,7 @@ export function SqlQueryDisplay({ query }: SqlQueryDisplayProps) {
   };
 
   return (
-    <div className="ml-11 mt-2">
+    <div className="ml-0 md:ml-11 mt-2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div className="rounded-lg border bg-card overflow-hidden">
           <CollapsibleTrigger asChild>

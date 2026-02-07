@@ -122,6 +122,20 @@ pre code {
   background-color: hsl(var(--muted) / 0.5);
 }
 
+/* Mobile table styles */
+@media (max-width: 767px) {
+  .prose th,
+  .prose td {
+    padding: 0.25rem 0.375rem;
+    font-size: 0.625rem;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
 /* Orbital dots animation for streaming indicators */
 .orbit-dots {
   width: 18px;

@@ -116,7 +116,7 @@ export function MessageBubble({ message, isStreaming = false, currentStage }: Me
 
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm overflow-hidden break-words relative group",
+          "max-w-[90%] md:max-w-[75%] rounded-2xl px-3 md:px-4 py-2.5 shadow-sm overflow-x-auto break-words relative group",
           isUser
             ? "bg-primary text-primary-foreground rounded-tr-sm"
             : "bg-muted text-foreground rounded-tl-sm",

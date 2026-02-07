@@ -44,7 +44,7 @@ export function ConversationSidebar({
   };
 
   return (
-    <div className="w-64 max-w-64 flex-shrink-0 border-r bg-muted/30 flex flex-col h-screen sticky top-0 overflow-hidden">
+    <div className="w-[80vw] sm:w-64 max-w-[80vw] md:max-w-64 flex-shrink-0 border-r bg-background md:bg-muted/30 flex flex-col h-screen sticky top-0 overflow-hidden">
       <div className="p-3 border-b">
         <Button
           onClick={onNewConversation}
@@ -78,7 +78,7 @@ export function ConversationSidebar({
             >
               <div className="flex items-start justify-between gap-2 w-full">
                 <div className="flex-1 min-w-0 overflow-hidden">
-                  <p className="text-sm font-medium truncate max-w-[180px]" title={conv.title}>
+                  <p className="text-sm font-medium line-clamp-2" title={conv.title}>
                     {conv.title}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
