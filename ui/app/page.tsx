@@ -8,11 +8,20 @@ import { SettingsButton, SettingsDialogProvider } from "@/components/SettingsDia
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useConversation } from "@/hooks/useConversation";
 import { Activity, Database, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
 
   const {
     conversations,
@@ -30,8 +39,16 @@ export default function Home() {
     <SettingsDialogProvider>
       <TooltipProvider>
         <main className="h-screen flex bg-gradient-to-b from-slate-50 to-white overflow-hidden">
+          {/* Sidebar backdrop (mobile only) */}
+          <div
+            className={`fixed inset-0 bg-black/70 z-40 md:hidden transition-opacity ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            onClick={() => setSidebarOpen(false)}
+          />
+
           {/* Sidebar */}
-          {sidebarOpen && (
+          <div
+            className={`fixed inset-y-0 left-0 z-50 md:relative md:z-auto transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden"}`}
+          >
             <ConversationSidebar
               conversations={conversations}
               currentConversationId={currentConversationId}
@@ -39,12 +56,12 @@ export default function Home() {
               onSelectConversation={selectConversation}
               onDeleteConversation={removeConversation}
             />
-          )}
+          </div>
 
           {/* Main content */}
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
             <header className="flex-shrink-0 border-b bg-white/80 backdrop-blur-sm z-10">
-              <div className="px-6 py-4">
+              <div className="px-3 py-3 md:px-6 md:py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
@@ -64,10 +81,10 @@ export default function Home() {
                       <Activity className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h1 className="text-xl font-semibold text-foreground">
+                      <h1 className="text-base md:text-xl font-semibold text-foreground">
                         Clinical Trials Agent
                       </h1>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                      <p className="text-sm text-muted-foreground hidden sm:flex items-center gap-1.5">
                         <Database className="h-3 w-3" />
                         Query the AACT database using natural language
                       </p>
@@ -83,7 +100,7 @@ export default function Home() {
               </div>
             </header>
 
-            <div className="flex-1 flex flex-col w-full px-4 py-4 gap-4 min-h-0 overflow-hidden">
+            <div className="flex-1 flex flex-col w-full px-2 py-2 md:px-4 md:py-4 gap-3 md:gap-4 min-h-0 overflow-hidden">
               <ExampleQuestions onSelect={setSelectedQuestion} />
               <ChatInterface
                 initialQuestion={selectedQuestion}
@@ -96,7 +113,7 @@ export default function Home() {
               />
             </div>
 
-            <footer className="flex-shrink-0 border-t py-3 text-center text-sm text-muted-foreground">
+            <footer className="flex-shrink-0 border-t py-2 md:py-3 text-center text-xs md:text-sm text-muted-foreground">
               <p>
                 Powered by{" "}
                 <a

@@ -92,7 +92,7 @@ export function SettingsDialog({ open, onOpenChange, reason }: SettingsDialogPro
       />
 
       {/* Dialog */}
-      <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+      <div className="relative z-10 w-full max-w-md mx-4 md:mx-0 rounded-lg border bg-background p-4 md:p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Settings className="h-5 w-5" />

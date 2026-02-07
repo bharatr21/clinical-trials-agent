@@ -171,8 +171,10 @@ async def get_conversation(
         raw_messages = state.values.get("messages", [])
         for msg in raw_messages:
             formatted = _format_message(msg)
-            # Skip tool messages and empty messages (tool calls without text)
-            if formatted.role != "tool" and formatted.content.strip():
+            # Skip tool messages and empty messages (but keep AI messages with tool_calls)
+            if formatted.role == "tool":
+                continue
+            if formatted.content.strip() or formatted.tool_calls:
                 messages.append(formatted)
 
     return ConversationDetail(
