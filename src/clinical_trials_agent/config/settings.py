@@ -65,7 +65,8 @@ class Settings(BaseSettings):
         """Construct PostgreSQL URL for application database (async with asyncpg)."""
         user = quote_plus(self.app_db_user)
         password = quote_plus(self.app_db_password)
-        return f"postgresql+asyncpg://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}?sslmode={self.app_db_sslmode}"
+        ssl_param = "false" if self.app_db_sslmode == "disable" else "true"
+        return f"postgresql+asyncpg://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}?ssl={ssl_param}"
 
 
 @lru_cache
