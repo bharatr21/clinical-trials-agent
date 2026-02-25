@@ -20,10 +20,14 @@ async def init_app_database() -> None:
     global _engine, _session_factory
 
     settings = get_settings()
+    connect_args = {}
+    if settings.app_db_sslmode == "disable":
+        connect_args["ssl"] = False
     _engine = create_async_engine(
         settings.app_database_url_async,
         echo=False,
         pool_pre_ping=True,
+        connect_args=connect_args,
     )
     _session_factory = async_sessionmaker(
         _engine,
