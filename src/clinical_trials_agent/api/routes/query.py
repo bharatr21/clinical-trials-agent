@@ -54,7 +54,7 @@ class QueryRequest(BaseModel):
         description="Natural language question about clinical trials",
         min_length=1,
         max_length=1000,
-        examples=["How many breast cancer trials are recruiting?"],
+        examples=["How many lung cancer trials are recruiting?"],
     )
     conversation_id: str | None = Field(
         None,

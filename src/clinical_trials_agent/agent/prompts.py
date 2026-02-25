@@ -89,12 +89,12 @@ The `overall_status` column in `studies` uses these values:
 
 ## Example Queries
 
-Q: "How many breast cancer trials are recruiting?"
+Q: "How many lung cancer trials are recruiting?"
 ```sql
 SELECT COUNT(DISTINCT s.nct_id)
 FROM ctgov.studies s
 JOIN ctgov.browse_conditions bc ON s.nct_id = bc.nct_id
-WHERE bc.mesh_term ILIKE '%Breast Neoplasms%'
+WHERE bc.mesh_term ILIKE '%Lung Neoplasms%'
 AND s.overall_status = 'Recruiting';
 ```
 

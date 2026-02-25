@@ -50,19 +50,22 @@ class Settings(BaseSettings):
         password = quote_plus(self.db_password)
         return f"postgresql://{user}:{password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
+    # SSL mode for app database (set to "disable" for Railway internal networking)
+    app_db_sslmode: str = "prefer"
+
     @property
     def app_database_url(self) -> str:
         """Construct PostgreSQL URL for application database (async with psycopg)."""
         user = quote_plus(self.app_db_user)
         password = quote_plus(self.app_db_password)
-        return f"postgresql://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}"
+        return f"postgresql://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}?sslmode={self.app_db_sslmode}"
 
     @property
     def app_database_url_async(self) -> str:
         """Construct PostgreSQL URL for application database (async with asyncpg)."""
         user = quote_plus(self.app_db_user)
         password = quote_plus(self.app_db_password)
-        return f"postgresql+asyncpg://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}"
+        return f"postgresql+asyncpg://{user}:{password}@{self.app_db_host}:{self.app_db_port}/{self.app_db_name}?sslmode={self.app_db_sslmode}"
 
 
 @lru_cache

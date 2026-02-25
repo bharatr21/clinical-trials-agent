@@ -12,19 +12,29 @@ from clinical_trials_agent.config import get_settings
 # See: https://aact.ctti-clinicaltrials.org/schema
 AACT_TABLES = [
     "studies",  # Core study information (nct_id, brief_title, overall_status, etc.)
+    "brief_summaries",  # Brief study descriptions
+    "detailed_descriptions",  # Extended study descriptions
     "conditions",  # Study conditions/diseases
     "browse_conditions",  # MeSH-standardized conditions (CRITICAL for search)
+    "keywords",  # Study keywords
     "interventions",  # Drugs, devices, procedures being studied
     "browse_interventions",  # MeSH-standardized interventions
     "eligibilities",  # Inclusion/exclusion criteria, age, gender
+    "designs",  # Study design (phase, allocation, masking)
+    "design_groups",  # Arm/group info (experimental, control, etc.)
+    "design_outcomes",  # Primary/secondary outcome measure definitions
     "outcomes",  # Primary/secondary outcome measures and results
+    "outcome_measurements",  # Actual outcome result data (values, units)
     "sponsors",  # Study sponsors (lead, collaborator)
     "facilities",  # Study sites/locations
     "countries",  # Countries where study is conducted
-    "designs",  # Study design (phase, allocation, masking)
+    "calculated_values",  # Pre-computed fields (age ranges, facility counts, etc.)
     "participant_flows",  # Enrollment and participant flow
     "reported_events",  # Adverse events
+    "reported_event_totals",  # Summary adverse event counts
     "result_groups",  # Result group definitions
+    "mesh_headings",  # MeSH vocabulary headings (lookup, no nct_id)
+    "mesh_terms",  # MeSH term hierarchy with tree numbers (lookup, no nct_id)
 ]
 
 
