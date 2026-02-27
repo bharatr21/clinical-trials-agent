@@ -37,15 +37,10 @@ class TestSettings:
         settings = Settings(db_user="test", db_password="test", openai_model="gpt-4o")
         assert settings.openai_model == "gpt-4o"
 
-    def test_default_langsmith_tracing(self):
-        """LangSmith tracing should be enabled by default."""
+    def test_langfuse_base_url_is_set(self):
+        """Langfuse base URL should be set."""
         settings = Settings(db_user="test", db_password="test")
-        assert settings.langsmith_tracing is True
-
-    def test_default_langsmith_project(self):
-        """Default LangSmith project should be set."""
-        settings = Settings(db_user="test", db_password="test")
-        assert settings.langsmith_project == "clinical-trials-agent"
+        assert settings.langfuse_base_url != ""
 
     def test_default_api_port(self):
         """Default API port should be 8000."""

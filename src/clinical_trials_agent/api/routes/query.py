@@ -145,7 +145,7 @@ async def query_clinical_trials(
         )
 
         agent = create_agent()
-        config: dict = {"configurable": {"thread_id": conversation_id}}
+        config: dict = {"configurable": {"thread_id": conversation_id, "client_id": client_id}}
         if openai_api_key:
             config["configurable"]["openai_api_key"] = openai_api_key
 
@@ -232,7 +232,7 @@ async def query_clinical_trials_stream(
     async def generate():
         try:
             agent = create_agent()
-            config: dict = {"configurable": {"thread_id": conversation_id}}
+            config: dict = {"configurable": {"thread_id": conversation_id, "client_id": client_id}}
             if openai_api_key:
                 config["configurable"]["openai_api_key"] = openai_api_key
 
