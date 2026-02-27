@@ -168,18 +168,42 @@ def _extract_cte_names(query: str) -> set[str]:
 
 
 def _extract_table_names(query: str) -> set[str]:
-    """Extract table names from a SQL query using sqlparse.
+    """Extract table names from a SQL query.
 
-    Looks for identifiers following FROM and JOIN keywords.
+    Looks for identifiers following FROM and JOIN keywords, handling:
+    - Unquoted: FROM ctgov.studies s
+    - Double-quoted: FROM "ctgov"."studies"
+    - Mixed: FROM ctgov."studies"
+    - Backtick-quoted: FROM `ctgov`.`studies`
+    - Bracket-quoted: FROM [ctgov].[studies]
     """
     tables = set()
-    # Simple regex approach: find table refs after FROM/JOIN
-    # This handles: FROM ctgov.studies s, JOIN ctgov.conditions c, etc.
+
+    # Pattern for a single identifier: quoted or unquoted
+    _ident = r'(?:"[^"]+"|`[^`]+`|\[[^\]]+\]|[a-zA-Z_][a-zA-Z0-9_]*)'
+    # Schema-qualified or plain identifier after FROM/JOIN
     table_ref_pattern = re.compile(
-        r"(?:FROM|JOIN)\s+" r"([a-zA-Z_][a-zA-Z0-9_.]*)",
+        rf"(?:FROM|JOIN)\s+({_ident}(?:\.{_ident})?)",
         re.I,
     )
+
     for match in table_ref_pattern.finditer(query):
-        table = match.group(1).lower()
-        tables.add(table)
+        raw = match.group(1)
+        # Strip quotes/brackets from each part and rejoin
+        parts = raw.split(".")
+        normalized = ".".join(_strip_quotes(p) for p in parts).lower()
+        tables.add(normalized)
+
     return tables
+
+
+def _strip_quotes(identifier: str) -> str:
+    """Strip surrounding double quotes, backticks, or square brackets."""
+    if len(identifier) >= 2:
+        if (identifier[0] == '"' and identifier[-1] == '"') or (
+            identifier[0] == "`" and identifier[-1] == "`"
+        ):
+            return identifier[1:-1]
+        if identifier[0] == "[" and identifier[-1] == "]":
+            return identifier[1:-1]
+    return identifier

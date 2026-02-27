@@ -137,7 +137,7 @@ def create_topic_guardrail_node():
                 break
 
         if not user_message:
-            return {}
+            return {"guardrail_block": False}
 
         # Fast check: prompt injection detection (no LLM needed)
         if detect_prompt_injection(user_message):
@@ -173,7 +173,7 @@ def create_topic_guardrail_node():
                 "guardrail_block": True,
             }
 
-        return {}
+        return {"guardrail_block": False}
 
     return topic_guardrail
 
@@ -300,6 +300,7 @@ def create_check_query_node(run_query_tool: BaseTool):
             except SQLValidationError as e:
                 logger.warning(f"SQL guardrail blocked query: {e}")
                 # Replace the tool call response with an error message
+                # and flag so the graph routes back to generate_query
                 return {
                     "messages": [
                         AIMessage(
@@ -308,9 +309,10 @@ def create_check_query_node(run_query_tool: BaseTool):
                             f"approach.",
                             id=state["messages"][-1].id,
                         )
-                    ]
+                    ],
+                    "sql_validation_failed": True,
                 }
 
-        return {"messages": [response]}
+        return {"messages": [response], "sql_validation_failed": False}
 
     return check_query

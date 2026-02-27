@@ -102,6 +102,22 @@ class TestSQLValidation:
         with pytest.raises(SQLValidationError, match="allowlist"):
             validate_sql_query("SELECT * FROM secret_table")
 
+    def test_blocks_quoted_disallowed_table(self):
+        with pytest.raises(SQLValidationError, match="allowlist"):
+            validate_sql_query('SELECT * FROM "ctgov"."secret_table"')
+
+    def test_blocks_backtick_quoted_disallowed_table(self):
+        with pytest.raises(SQLValidationError, match="allowlist"):
+            validate_sql_query("SELECT * FROM `ctgov`.`secret_table`")
+
+    def test_blocks_bracket_quoted_disallowed_table(self):
+        with pytest.raises(SQLValidationError, match="allowlist"):
+            validate_sql_query("SELECT * FROM [ctgov].[secret_table]")
+
+    def test_allows_quoted_valid_table(self):
+        query = 'SELECT * FROM "ctgov"."studies" LIMIT 1'
+        assert validate_sql_query(query) == query
+
     def test_allows_all_aact_tables(self):
         """Verify all known AACT tables pass validation."""
         from clinical_trials_agent.database.connection import AACT_TABLES

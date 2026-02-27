@@ -77,9 +77,10 @@ def get_checkpointer() -> AsyncPostgresSaver | None:
 
 
 class AgentState(MessagesState):
-    """Extended state that includes a guardrail block flag."""
+    """Extended state that includes guardrail flags."""
 
     guardrail_block: bool = False
+    sql_validation_failed: bool = False
 
 
 def should_continue_after_guardrail(
@@ -89,6 +90,15 @@ def should_continue_after_guardrail(
     if state.get("guardrail_block"):
         return END
     return "list_tables"
+
+
+def should_continue_after_check(
+    state: AgentState,
+) -> Literal["run_query", "generate_query"]:
+    """Route after check_query: run the query or retry generation on validation failure."""
+    if state.get("sql_validation_failed"):
+        return "generate_query"
+    return "run_query"
 
 
 def should_continue(state: AgentState) -> Literal["check_query", "__end__"]:
@@ -117,7 +127,9 @@ def _build_agent_graph() -> StateGraph:
                                                                            ↓         ↓
                                                                       check_query    END
                                                                            ↓
-                                                                      run_query
+                                                                     [valid SQL?]
+                                                                      ↓         ↓
+                                                                 run_query   generate_query (retry)
                                                                            ↓
                                                                      generate_query
     """
@@ -157,7 +169,7 @@ def _build_agent_graph() -> StateGraph:
     builder.add_edge("call_get_schema", "get_schema")
     builder.add_edge("get_schema", "generate_query")
     builder.add_conditional_edges("generate_query", should_continue)
-    builder.add_edge("check_query", "run_query")
+    builder.add_conditional_edges("check_query", should_continue_after_check)
     builder.add_edge("run_query", "generate_query")
 
     return builder

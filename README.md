@@ -20,15 +20,17 @@ A natural language interface for querying the [AACT (Aggregate Analysis of Clini
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           LangGraph SQL Agent                                │
 │  ┌───────────┐   ┌───────────┐   ┌───────────┐   ┌───────────┐             │
-│  │   List    │──▶│   Get     │──▶│ Generate  │──▶│   Check   │             │
-│  │  Tables   │   │  Schema   │   │   Query   │   │   Query   │             │
+│  │  Topic    │──▶│   List    │──▶│   Get     │──▶│ Generate  │             │
+│  │ Guardrail │   │  Tables   │   │  Schema   │   │   Query   │             │
 │  └───────────┘   └───────────┘   └───────────┘   └─────┬─────┘             │
-│                                        ▲               │                    │
-│                                        │               ▼                    │
-│                                        │         ┌───────────┐             │
-│                                        └─────────│    Run    │             │
-│                                                  │   Query   │             │
-│                                                  └───────────┘             │
+│                                        ▲          ┌─────▼─────┐             │
+│                                        │          │   Check   │             │
+│                                        │          │   Query   │             │
+│                                        │          └─────┬─────┘             │
+│                                        │          ┌─────▼─────┐             │
+│                                        └──────────│    Run    │             │
+│                                                   │   Query   │             │
+│                                                   └───────────┘             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                     ┌─────────────────┴─────────────────┐
@@ -52,16 +54,20 @@ flowchart TB
 
     subgraph Agent["LangGraph SQL Agent"]
         direction LR
+        Guardrail["Topic Guardrail"]
         ListTables["List Tables"]
         GetSchema["Get Schema"]
         GenerateQuery["Generate Query"]
         CheckQuery["Check Query"]
         RunQuery["Run Query"]
 
+        Guardrail -->|on-topic| ListTables
+        Guardrail -->|off-topic| End["END"]
         ListTables --> GetSchema
         GetSchema --> GenerateQuery
         GenerateQuery --> CheckQuery
-        CheckQuery --> RunQuery
+        CheckQuery -->|valid SQL| RunQuery
+        CheckQuery -->|invalid SQL| GenerateQuery
         RunQuery --> GenerateQuery
     end
 
@@ -81,25 +87,29 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A[User Question] --> B[List Tables]
+    A[User Question] --> G[Topic Guardrail]
+    G -->|off-topic| X[Reject]
+    G -->|on-topic| B[List Tables]
     B --> C[Get Schema]
     C --> D[Generate Query]
     D --> E[Check Query]
-    E --> F[Run Query]
-    F --> G{Has Answer?}
-    G -->|No| D
-    G -->|Yes| H[Generate Response]
-    H --> I[Return Answer]
+    E -->|valid| F[Run Query]
+    E -->|invalid| D
+    F --> H{Has Answer?}
+    H -->|No| D
+    H -->|Yes| I[Generate Response]
+    I --> J[Return Answer]
 ```
 
 The LangGraph agent follows a structured workflow to convert natural language questions into SQL:
 
-1. **List Tables** - Discovers available tables in the AACT database
-2. **Get Schema** - LLM selects relevant tables and retrieves their schemas
-3. **Generate Query** - Creates a SQL query based on the question and schema
-4. **Check Query** - Validates the query for common SQL mistakes
-5. **Run Query** - Executes the validated query against the database
-6. **Generate Response** - Formulates a natural language answer from results
+1. **Topic Guardrail** - Checks for prompt injection, then classifies whether the question is about clinical trials. Off-topic queries are rejected early.
+2. **List Tables** - Discovers available tables in the AACT database
+3. **Get Schema** - LLM selects relevant tables and retrieves their schemas
+4. **Generate Query** - Creates a SQL query based on the question and schema
+5. **Check Query** - LLM validates for SQL mistakes, then a deterministic guardrail verifies it's a single SELECT on allowed tables with no DML/DDL
+6. **Run Query** - Executes the validated query against the database (with a 30s timeout)
+7. **Generate Response** - Formulates a natural language answer from results
 
 ## AACT Database
 
@@ -112,6 +122,17 @@ This project uses the **AACT (Aggregate Analysis of ClinicalTrials.gov)** databa
 Key tables include: `studies`, `conditions`, `interventions`, `outcomes`, `facilities`, `sponsors`, and many more.
 
 > **Note**: Only the deployer needs AACT credentials. End users of the deployed application do not need to register - the backend queries AACT on their behalf using a single service account.
+
+## Guardrails
+
+The agent includes multiple layers of safety checks:
+
+- **Topic Enforcement** - LLM-based intent classifier rejects off-topic queries (non-clinical-trials questions) with a helpful redirect
+- **Prompt Injection Detection** - Regex-based patterns block common injection attempts before they reach the LLM
+- **SQL DML/DDL Blocking** - Deterministic check prevents `INSERT`, `UPDATE`, `DELETE`, `DROP`, and other destructive statements
+- **SQL Structure Validation** - Parses queries with `sqlparse` to enforce single `SELECT` statements only (CTEs supported)
+- **Table Allowlist** - All referenced tables (including quoted identifiers) must be in the known AACT table set
+- **Query Timeout** - 30-second `statement_timeout` on database connections prevents runaway queries
 
 ## Features
 
