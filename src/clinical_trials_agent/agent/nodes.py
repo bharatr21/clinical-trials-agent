@@ -122,7 +122,9 @@ def create_call_get_schema_node(get_schema_tool: BaseTool):
 
         def invoke_llm(llm: ChatOpenAI, callbacks: list):
             llm_with_tools = llm.bind_tools([get_schema_tool], tool_choice="any")
-            return llm_with_tools.invoke(state["messages"], config={"callbacks": callbacks})
+            return llm_with_tools.invoke(
+                state["messages"], config={"callbacks": callbacks}
+            )
 
         response = _invoke_with_fallback(invoke_llm, config)
         logger.debug(f"LLM response tool calls: {response.tool_calls}")
@@ -147,7 +149,9 @@ def create_generate_query_node(run_query_tool: BaseTool, top_k: int = 10):
 
         def invoke_llm(llm: ChatOpenAI, callbacks: list):
             llm_with_tools = llm.bind_tools([run_query_tool])
-            return llm_with_tools.invoke([system_message, *state["messages"]], config={"callbacks": callbacks})
+            return llm_with_tools.invoke(
+                [system_message, *state["messages"]], config={"callbacks": callbacks}
+            )
 
         response = _invoke_with_fallback(invoke_llm, config)
         if response.tool_calls:
@@ -181,7 +185,9 @@ def create_check_query_node(run_query_tool: BaseTool):
 
         def invoke_llm(llm: ChatOpenAI, callbacks: list):
             llm_with_tools = llm.bind_tools([run_query_tool], tool_choice="any")
-            return llm_with_tools.invoke([system_message, user_message], config={"callbacks": callbacks})
+            return llm_with_tools.invoke(
+                [system_message, user_message], config={"callbacks": callbacks}
+            )
 
         response = _invoke_with_fallback(invoke_llm, config)
         # Preserve the message ID for proper graph flow
