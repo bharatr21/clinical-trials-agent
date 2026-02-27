@@ -14,6 +14,7 @@ from clinical_trials_agent.agent.nodes import (
     create_check_query_node,
     create_generate_query_node,
     create_list_tables_node,
+    create_topic_guardrail_node,
 )
 from clinical_trials_agent.agent.tools import get_sql_tools, get_tool_by_name
 from clinical_trials_agent.config import get_settings
@@ -75,7 +76,22 @@ def get_checkpointer() -> AsyncPostgresSaver | None:
     return _checkpointer
 
 
-def should_continue(state: MessagesState) -> Literal["check_query", "__end__"]:
+class AgentState(MessagesState):
+    """Extended state that includes a guardrail block flag."""
+
+    guardrail_block: bool = False
+
+
+def should_continue_after_guardrail(
+    state: AgentState,
+) -> Literal["list_tables", "__end__"]:
+    """Route after topic guardrail: proceed or short-circuit."""
+    if state.get("guardrail_block"):
+        return END
+    return "list_tables"
+
+
+def should_continue(state: AgentState) -> Literal["check_query", "__end__"]:
     """Determine whether to check the query or end the conversation.
 
     If the LLM generated a tool call (SQL query), route to check_query.
@@ -92,15 +108,18 @@ def _build_agent_graph() -> StateGraph:
     """Build the SQL agent graph (uncompiled).
 
     Graph flow:
-    START → list_tables → call_get_schema → get_schema → generate_query
-                                                              ↓
-                                                        [has tool call?]
-                                                         ↓         ↓
-                                                    check_query    END
-                                                         ↓
-                                                    run_query
-                                                         ↓
-                                                   generate_query
+    START → topic_guardrail → [on-topic?]
+                                ↓ no → END (off-topic response already in messages)
+                                ↓ yes
+                              list_tables → call_get_schema → get_schema → generate_query
+                                                                                ↓
+                                                                          [has tool call?]
+                                                                           ↓         ↓
+                                                                      check_query    END
+                                                                           ↓
+                                                                      run_query
+                                                                           ↓
+                                                                     generate_query
     """
     # Get tools
     tools = get_sql_tools()
@@ -113,15 +132,17 @@ def _build_agent_graph() -> StateGraph:
     run_query_node = ToolNode([run_query_tool], name="run_query")
 
     # Create function nodes
+    topic_guardrail = create_topic_guardrail_node()
     list_tables = create_list_tables_node(list_tables_tool)
     call_get_schema = create_call_get_schema_node(get_schema_tool)
     generate_query = create_generate_query_node(run_query_tool)
     check_query = create_check_query_node(run_query_tool)
 
     # Build the graph
-    builder = StateGraph(MessagesState)
+    builder = StateGraph(AgentState)
 
     # Add nodes
+    builder.add_node("topic_guardrail", topic_guardrail)
     builder.add_node("list_tables", list_tables)
     builder.add_node("call_get_schema", call_get_schema)
     builder.add_node(get_schema_node, "get_schema")
@@ -130,7 +151,8 @@ def _build_agent_graph() -> StateGraph:
     builder.add_node(run_query_node, "run_query")
 
     # Add edges
-    builder.add_edge(START, "list_tables")
+    builder.add_edge(START, "topic_guardrail")
+    builder.add_conditional_edges("topic_guardrail", should_continue_after_guardrail)
     builder.add_edge("list_tables", "call_get_schema")
     builder.add_edge("call_get_schema", "get_schema")
     builder.add_edge("get_schema", "generate_query")
