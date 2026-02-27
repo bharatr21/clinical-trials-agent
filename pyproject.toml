@@ -20,6 +20,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "slowapi>=0.1.9",
+    "langfuse>=2.0.0",
 ]
 
 [project.optional-dependencies]

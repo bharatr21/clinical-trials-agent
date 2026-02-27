@@ -18,8 +18,8 @@ def mock_settings():
         db_password="test_pass",
         openai_api_key="test-key",
         openai_model="gpt-4o",
-        langsmith_tracing=False,
-        langsmith_api_key="test-key",
+        langfuse_secret_key="",
+        langfuse_public_key="",
     )
 
 

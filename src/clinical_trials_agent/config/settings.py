@@ -26,10 +26,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
 
-    # LangSmith settings
-    langsmith_tracing: bool = True
-    langsmith_api_key: str = ""
-    langsmith_project: str = "clinical-trials-agent"
+    # LangFuse settings (for tracing)
+    langfuse_secret_key: str = ""
+    langfuse_public_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
     # API settings
     api_host: str = "127.0.0.1"
