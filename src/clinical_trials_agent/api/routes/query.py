@@ -191,6 +191,7 @@ async def query_clinical_trials(
 
 # Human-readable stage names for the LangGraph nodes
 STAGE_LABELS = {
+    "topic_guardrail": "Checking query relevance",
     "list_tables": "Discovering database tables",
     "call_get_schema": "Selecting relevant tables",
     "get_schema": "Loading table schemas",

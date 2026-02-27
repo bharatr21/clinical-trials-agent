@@ -55,6 +55,9 @@ def get_engine():
         pool_timeout=30,  # Wait up to 30s for a connection
         pool_recycle=300,  # Recycle connections after 5 minutes
         pool_pre_ping=True,  # Verify connections before use
+        connect_args={
+            "options": "-c statement_timeout=30000",  # 30s query timeout
+        },
     )
 
     return engine

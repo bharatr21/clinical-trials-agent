@@ -10,6 +10,14 @@ from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph import MessagesState
 
+from clinical_trials_agent.agent.guardrails import (
+    INJECTION_DETECTED_RESPONSE,
+    OFF_TOPIC_RESPONSE,
+    TOPIC_CLASSIFIER_PROMPT,
+    SQLValidationError,
+    detect_prompt_injection,
+    validate_sql_query,
+)
 from clinical_trials_agent.agent.prompts import (
     CHECK_QUERY_SYSTEM_PROMPT,
     GENERATE_QUERY_SYSTEM_PROMPT,
@@ -104,6 +112,70 @@ def _invoke_with_fallback(llm_func, config: RunnableConfig | None = None):
     except RateLimitError:
         logger.error("Server API key rate limited and no user key available")
         raise
+
+
+def create_topic_guardrail_node():
+    """Create a node that checks if the user's question is on-topic.
+
+    This runs before the main pipeline. It:
+    1. Checks for prompt injection patterns (deterministic, fast)
+    2. Classifies whether the question is about clinical trials (LLM call)
+
+    If off-topic or injection detected, sets a guardrail_block flag in state
+    so the graph can short-circuit to END.
+    """
+
+    def topic_guardrail(state: MessagesState, config: RunnableConfig) -> dict:
+        # Find the latest user message
+        user_message = ""
+        for msg in reversed(state["messages"]):
+            if hasattr(msg, "type") and msg.type == "human":
+                user_message = msg.content
+                break
+            elif isinstance(msg, dict) and msg.get("role") == "user":
+                user_message = msg["content"]
+                break
+
+        if not user_message:
+            return {"guardrail_block": False}
+
+        # Fast check: prompt injection detection (no LLM needed)
+        if detect_prompt_injection(user_message):
+            logger.warning(f"Prompt injection blocked: {user_message[:100]}...")
+            return {
+                "messages": [AIMessage(content=INJECTION_DETECTED_RESPONSE)],
+                "guardrail_block": True,
+            }
+
+        # LLM-based topic classification
+        logger.info("Node: topic_guardrail - Classifying user intent")
+
+        def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
+            return llm.invoke(
+                [
+                    {"role": "system", "content": TOPIC_CLASSIFIER_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+                config={"callbacks": callbacks, "metadata": metadata},
+                max_tokens=3,
+            )
+
+        response = _invoke_with_fallback(invoke_llm, config)
+        classification = response.content.strip().lower()
+        logger.info(
+            f"Topic classification: '{classification}' for: {user_message[:80]}"
+        )
+
+        if classification != "yes":
+            logger.info("Off-topic query blocked by guardrail")
+            return {
+                "messages": [AIMessage(content=OFF_TOPIC_RESPONSE)],
+                "guardrail_block": True,
+            }
+
+        return {"guardrail_block": False}
+
+    return topic_guardrail
 
 
 def create_list_tables_node(list_tables_tool: BaseTool):
@@ -222,6 +294,25 @@ def create_check_query_node(run_query_tool: BaseTool):
             else:
                 logger.debug("Query validated without changes")
 
-        return {"messages": [response]}
+            # Deterministic SQL guardrail: validate before execution
+            try:
+                validate_sql_query(validated_query)
+            except SQLValidationError as e:
+                logger.warning(f"SQL guardrail blocked query: {e}")
+                # Replace the tool call response with an error message
+                # and flag so the graph routes back to generate_query
+                return {
+                    "messages": [
+                        AIMessage(
+                            content=f"I'm unable to execute that query because it "
+                            f"failed a safety check: {e}. Let me try a different "
+                            f"approach.",
+                            id=state["messages"][-1].id,
+                        )
+                    ],
+                    "sql_validation_failed": True,
+                }
+
+        return {"messages": [response], "sql_validation_failed": False}
 
     return check_query
