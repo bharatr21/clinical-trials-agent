@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lightbulb } from "lucide-react";
 
 const EXAMPLE_QUESTIONS = [
-  "How many breast cancer trials are currently recruiting?",
-  "What are the latest Phase 3 diabetes trials?",
-  "Show me COVID-19 vaccine trials sponsored by Pfizer",
-  "How many clinical trials are being conducted in California?",
   "What are the most common conditions being studied?",
+  "How many trials are currently in Phase 3?",
+  "Which sponsors have the most active trials?",
+  "Show me trials that started in the last 6 months",
+  "How many clinical trials are being conducted in California?",
 ];
 
 interface ExampleQuestionsProps {

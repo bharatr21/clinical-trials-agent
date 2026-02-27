@@ -14,7 +14,7 @@ test.describe("Home Page", () => {
 
     // Check example questions card
     await expect(page.getByText("Try an example question")).toBeVisible();
-    await expect(page.getByRole("button", { name: /breast cancer trials/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /common conditions/i })).toBeVisible();
   });
 
   test("should display the chat interface", async ({ page }) => {
@@ -46,21 +46,21 @@ test.describe("Example Questions", () => {
     await expect(input).toHaveValue("");
 
     // Click an example question
-    await page.getByRole("button", { name: /breast cancer trials/i }).click();
+    await page.getByRole("button", { name: /common conditions/i }).click();
 
     // Input should be populated
-    await expect(input).toHaveValue(/breast cancer/i);
+    await expect(input).toHaveValue(/common conditions/i);
   });
 
   test("should show all example questions", async ({ page }) => {
     await page.goto("/");
 
     const examples = [
-      /breast cancer trials/i,
-      /Phase 3 diabetes/i,
-      /COVID-19 vaccine/i,
-      /California/i,
       /common conditions/i,
+      /Phase 3/i,
+      /most active trials/i,
+      /last 6 months/i,
+      /California/i,
     ];
 
     for (const example of examples) {
