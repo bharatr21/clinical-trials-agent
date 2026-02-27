@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
+from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph import MessagesState
 
@@ -17,24 +18,42 @@ from clinical_trials_agent.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_langfuse_initialized = False
 
-def _get_langfuse_handler(
-    config: RunnableConfig | None = None,
-) -> LangfuseCallbackHandler | None:
-    """Create a Langfuse callback handler if credentials are configured."""
+
+def _ensure_langfuse_client() -> bool:
+    """Initialize the global Langfuse client once. Returns True if configured."""
+    global _langfuse_initialized
+    if _langfuse_initialized:
+        return True
+
     settings = get_settings()
     if not settings.langfuse_secret_key or not settings.langfuse_public_key:
-        return None
+        return False
 
-    configurable = config.get("configurable", {}) if config else {}
-
-    return LangfuseCallbackHandler(
+    Langfuse(
         secret_key=settings.langfuse_secret_key,
         public_key=settings.langfuse_public_key,
         host=settings.langfuse_base_url,
-        user_id=configurable.get("client_id"),
-        session_id=configurable.get("thread_id"),
     )
+    _langfuse_initialized = True
+    return True
+
+
+def _get_langfuse_handler(
+    config: RunnableConfig | None = None,
+) -> tuple[LangfuseCallbackHandler | None, dict]:
+    """Create a Langfuse callback handler and metadata if configured."""
+    if not _ensure_langfuse_client():
+        return None, {}
+
+    configurable = config.get("configurable", {}) if config else {}
+    metadata = {
+        "langfuse_user_id": configurable.get("client_id"),
+        "langfuse_session_id": configurable.get("thread_id"),
+    }
+
+    return LangfuseCallbackHandler(), metadata
 
 
 def _get_llm(
@@ -69,19 +88,19 @@ def _invoke_with_fallback(llm_func, config: RunnableConfig | None = None):
 
     user_key = config.get("configurable", {}).get("openai_api_key") if config else None
 
-    langfuse_handler = _get_langfuse_handler(config)
+    langfuse_handler, langfuse_metadata = _get_langfuse_handler(config)
     callbacks = [langfuse_handler] if langfuse_handler else []
 
     # If user provided a key, use it directly (they likely hit rate limit before)
     if user_key:
         logger.info("Using user-provided OpenAI API key")
         llm = _get_llm(config, use_fallback=True)
-        return llm_func(llm, callbacks)
+        return llm_func(llm, callbacks, langfuse_metadata)
 
     # Otherwise try server key, with no fallback available
     try:
         llm = _get_llm(config, use_fallback=False)
-        return llm_func(llm, callbacks)
+        return llm_func(llm, callbacks, langfuse_metadata)
     except RateLimitError:
         logger.error("Server API key rate limited and no user key available")
         raise
@@ -120,10 +139,11 @@ def create_call_get_schema_node(get_schema_tool: BaseTool):
             f"Messages to LLM: {[m.content if hasattr(m, 'content') else str(m) for m in state['messages']]}"
         )
 
-        def invoke_llm(llm: ChatOpenAI, callbacks: list):
+        def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
             llm_with_tools = llm.bind_tools([get_schema_tool], tool_choice="any")
             return llm_with_tools.invoke(
-                state["messages"], config={"callbacks": callbacks}
+                state["messages"],
+                config={"callbacks": callbacks, "metadata": metadata},
             )
 
         response = _invoke_with_fallback(invoke_llm, config)
@@ -147,10 +167,11 @@ def create_generate_query_node(run_query_tool: BaseTool, top_k: int = 10):
         }
         logger.debug(f"System prompt: {system_prompt[:500]}...")
 
-        def invoke_llm(llm: ChatOpenAI, callbacks: list):
+        def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
             llm_with_tools = llm.bind_tools([run_query_tool])
             return llm_with_tools.invoke(
-                [system_message, *state["messages"]], config={"callbacks": callbacks}
+                [system_message, *state["messages"]],
+                config={"callbacks": callbacks, "metadata": metadata},
             )
 
         response = _invoke_with_fallback(invoke_llm, config)
@@ -183,10 +204,11 @@ def create_check_query_node(run_query_tool: BaseTool):
         user_message = {"role": "user", "content": original_query}
         logger.debug(f"Query to validate: {original_query}")
 
-        def invoke_llm(llm: ChatOpenAI, callbacks: list):
+        def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
             llm_with_tools = llm.bind_tools([run_query_tool], tool_choice="any")
             return llm_with_tools.invoke(
-                [system_message, user_message], config={"callbacks": callbacks}
+                [system_message, user_message],
+                config={"callbacks": callbacks, "metadata": metadata},
             )
 
         response = _invoke_with_fallback(invoke_llm, config)
