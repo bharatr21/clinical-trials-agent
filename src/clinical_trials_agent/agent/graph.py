@@ -90,7 +90,10 @@ def should_continue_after_guardrail(
     the last message is still the user's HumanMessage. We check message type
     instead of a state flag to avoid stickiness across checkpointed turns.
     """
-    last_message = state["messages"][-1]
+    messages = state.get("messages", [])
+    if not messages:
+        return "list_tables"
+    last_message = messages[-1]
     # If the guardrail appended a response, the last message is an AIMessage
     if hasattr(last_message, "type") and last_message.type == "ai":
         return END
@@ -105,10 +108,19 @@ def should_continue_after_check(
     If SQL validation passed, the response has tool_calls (the validated query).
     If it failed, the response is a plain AIMessage with no tool_calls.
     """
-    last_message = state["messages"][-1]
+    messages = state.get("messages", [])
+    if not messages:
+        return "generate_query"
+    last_message = messages[-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "run_query"
     return "generate_query"
+
+
+_TOOL_ROUTES: dict[str, str] = {
+    "sql_db_query": "check_query",
+    "search_clinicaltrials_api": "api_search",
+}
 
 
 def should_continue(
@@ -121,14 +133,18 @@ def should_continue(
     - search_clinicaltrials_api → api_search (external API fallback)
     - no tool call → END (LLM provided final answer)
     """
-    messages = state["messages"]
+    messages = state.get("messages", [])
+    if not messages:
+        return END
     last_message = messages[-1]
     if not last_message.tool_calls:
         return END
     tool_name = last_message.tool_calls[0].get("name", "")
-    if tool_name == "search_clinicaltrials_api":
-        return "api_search"
-    return "check_query"
+    route = _TOOL_ROUTES.get(tool_name)
+    if route is None:
+        logger.warning("Unexpected tool call '%s', ending conversation", tool_name)
+        return END
+    return route  # type: ignore[return-value]
 
 
 def _build_agent_graph() -> StateGraph:

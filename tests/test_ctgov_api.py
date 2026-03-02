@@ -62,9 +62,9 @@ async def test_search_ctgov_single_page():
 @pytest.mark.asyncio
 async def test_search_ctgov_pagination():
     """Follows pagination tokens across multiple pages."""
-    page1 = _make_response(["NCT001"], 3, next_page_token="token2")
-    page2 = _make_response(["NCT002"], 3, next_page_token="token3")
-    page3 = _make_response(["NCT003"], 3)
+    page1 = _make_response(["NCT00000001"], 3, next_page_token="token2")
+    page2 = _make_response(["NCT00000002"], 3, next_page_token="token3")
+    page3 = _make_response(["NCT00000003"], 3)
 
     mock_client = AsyncMock()
     mock_client.get.side_effect = [page1, page2, page3]
@@ -75,7 +75,7 @@ async def test_search_ctgov_pagination():
 
         result = await search_ctgov(condition="diabetes")
 
-    assert result["nct_ids"] == ["NCT001", "NCT002", "NCT003"]
+    assert result["nct_ids"] == ["NCT00000001", "NCT00000002", "NCT00000003"]
     assert result["total_count"] == 3
     assert result["was_truncated"] is False
 
@@ -110,7 +110,7 @@ async def test_search_ctgov_no_params():
 async def test_tool_wrapper_with_results():
     """Tool wrapper formats NCT IDs for SQL IN clause."""
     mock_result = {
-        "nct_ids": ["NCT001", "NCT002"],
+        "nct_ids": ["NCT00000001", "NCT00000002"],
         "total_count": 2,
         "was_truncated": False,
     }
@@ -121,8 +121,8 @@ async def test_tool_wrapper_with_results():
     ):
         output = await _search_clinicaltrials_api(condition="test")
 
-    assert "NCT001" in output
-    assert "NCT002" in output
+    assert "NCT00000001" in output
+    assert "NCT00000002" in output
     assert "WHERE s.nct_id IN" in output
 
 
@@ -144,7 +144,7 @@ async def test_tool_wrapper_no_results():
 async def test_tool_wrapper_truncated():
     """Tool wrapper includes truncation note."""
     mock_result = {
-        "nct_ids": ["NCT001", "NCT002"],
+        "nct_ids": ["NCT00000001", "NCT00000002"],
         "total_count": 500,
         "was_truncated": True,
     }

@@ -106,6 +106,28 @@ class SQLValidationError(Exception):
     """Raised when a SQL query fails guardrail validation."""
 
 
+def _strip_literals_and_comments(sql: str) -> str:
+    """Remove string literals and comments so keyword checks don't false-positive.
+
+    Uses sqlparse to tokenize and replace single-quoted string literals with ''
+    and drop comments. Double-quoted identifiers (Name tokens) are preserved.
+    """
+    parsed = sqlparse.parse(sql)
+    if not parsed:
+        return sql
+    parts: list[str] = []
+    for token in parsed[0].flatten():
+        ttype = token.ttype
+        # Only strip single-quoted string values, not double-quoted identifiers
+        if ttype is sqlparse.tokens.Literal.String.Single:
+            parts.append("''")
+        elif ttype is not None and ttype in sqlparse.tokens.Comment:
+            continue
+        else:
+            parts.append(str(token))
+    return "".join(parts)
+
+
 def validate_sql_query(query: str) -> str:
     """Validate a SQL query before execution.
 
@@ -119,8 +141,11 @@ def validate_sql_query(query: str) -> str:
     if not query or not query.strip():
         raise SQLValidationError("Empty query")
 
+    # Strip string literals and comments so keywords inside them don't trigger
+    sanitized = _strip_literals_and_comments(query)
+
     # Check 1: Block DML/DDL
-    if _DML_PATTERN.search(query):
+    if _DML_PATTERN.search(sanitized):
         logger.warning(f"DML/DDL statement blocked: {query[:200]}")
         raise SQLValidationError(
             "Only SELECT queries are allowed. "
@@ -145,8 +170,8 @@ def validate_sql_query(query: str) -> str:
 
     # Check 3: Verify all referenced tables are in the allowlist
     # CTE aliases (WITH x AS ...) are valid table references, not real tables
-    tables = _extract_table_names(query)
-    cte_names = _extract_cte_names(query)
+    tables = _extract_table_names(sanitized)
+    cte_names = _extract_cte_names(sanitized)
     disallowed = tables - _ALLOWED_TABLES - _ALLOWED_QUALIFIED - cte_names
     if disallowed:
         logger.warning(f"Query references disallowed tables: {disallowed}")
@@ -158,12 +183,22 @@ def validate_sql_query(query: str) -> str:
 
 
 def _extract_cte_names(query: str) -> set[str]:
-    """Extract CTE alias names from WITH clauses."""
-    cte_pattern = re.compile(r"\bWITH\b\s+(\w+)\s+AS\s*\(", re.I)
+    """Extract CTE alias names from WITH clauses.
+
+    Handles WITH RECURSIVE and quoted identifiers (double-quotes, backticks,
+    square brackets).
+    """
+    _cte_ident = r'(?:"[^"]+"|`[^`]+`|\[[^\]]+\]|\w+)'
+    cte_pattern = re.compile(
+        rf"\bWITH\b(?:\s+RECURSIVE)?\s+({_cte_ident})\s+AS\s*\(", re.I
+    )
     # Also match comma-separated CTEs: WITH a AS (...), b AS (...)
-    cte_continuation = re.compile(r"\)\s*,\s*(\w+)\s+AS\s*\(", re.I)
-    names = {m.group(1).lower() for m in cte_pattern.finditer(query)}
-    names |= {m.group(1).lower() for m in cte_continuation.finditer(query)}
+    cte_continuation = re.compile(rf"\)\s*,\s*({_cte_ident})\s+AS\s*\(", re.I)
+    names: set[str] = set()
+    for m in cte_pattern.finditer(query):
+        names.add(_strip_quotes(m.group(1)).lower())
+    for m in cte_continuation.finditer(query):
+        names.add(_strip_quotes(m.group(1)).lower())
     return names
 
 
@@ -176,23 +211,29 @@ def _extract_table_names(query: str) -> set[str]:
     - Mixed: FROM ctgov."studies"
     - Backtick-quoted: FROM `ctgov`.`studies`
     - Bracket-quoted: FROM [ctgov].[studies]
+    - Comma-separated: FROM ctgov.studies s, ctgov.conditions c
     """
     tables = set()
 
     # Pattern for a single identifier: quoted or unquoted
     _ident = r'(?:"[^"]+"|`[^`]+`|\[[^\]]+\]|[a-zA-Z_][a-zA-Z0-9_]*)'
-    # Schema-qualified or plain identifier after FROM/JOIN
+    # A single table reference (optionally schema-qualified)
+    _table_ref = rf"{_ident}(?:\.{_ident})?"
+    # Match FROM/JOIN followed by one or more comma-separated table references
     table_ref_pattern = re.compile(
-        rf"(?:FROM|JOIN)\s+({_ident}(?:\.{_ident})?)",
+        rf"(?:FROM|JOIN)\s+({_table_ref}(?:\s*,\s*{_table_ref})*)",
         re.I,
     )
+    # Pattern to extract individual table refs from the matched group
+    single_ref = re.compile(rf"({_table_ref})")
 
     for match in table_ref_pattern.finditer(query):
-        raw = match.group(1)
-        # Strip quotes/brackets from each part and rejoin
-        parts = raw.split(".")
-        normalized = ".".join(_strip_quotes(p) for p in parts).lower()
-        tables.add(normalized)
+        refs_str = match.group(1)
+        for ref_match in single_ref.finditer(refs_str):
+            raw = ref_match.group(1)
+            parts = raw.split(".")
+            normalized = ".".join(_strip_quotes(p) for p in parts).lower()
+            tables.add(normalized)
 
     return tables
 

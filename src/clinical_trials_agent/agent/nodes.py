@@ -1,5 +1,6 @@
 """Node functions for the LangGraph agent."""
 
+import hashlib
 import logging
 
 from langchain_core.messages import AIMessage
@@ -141,9 +142,15 @@ def create_topic_guardrail_node():
         if not user_message:
             return {}
 
+        msg_fingerprint = hashlib.sha256(user_message.encode()).hexdigest()[:12]
+
         # Fast check: prompt injection detection (no LLM needed)
         if detect_prompt_injection(user_message):
-            logger.warning(f"Prompt injection blocked: {user_message[:100]}...")
+            logger.warning(
+                "Prompt injection blocked (msg_hash=%s, len=%d)",
+                msg_fingerprint,
+                len(user_message),
+            )
             return {
                 "messages": [AIMessage(content=INJECTION_DETECTED_RESPONSE)],
             }
@@ -163,7 +170,10 @@ def create_topic_guardrail_node():
         response = _invoke_with_fallback(invoke_llm, config)
         classification = response.content.strip().strip(".").lower()
         logger.info(
-            f"Topic classification: '{classification}' for: {user_message[:80]}"
+            "Topic classification: '%s' (msg_hash=%s, len=%d)",
+            classification,
+            msg_fingerprint,
+            len(user_message),
         )
 
         if not classification.startswith("yes"):

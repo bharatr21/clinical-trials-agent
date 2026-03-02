@@ -31,12 +31,12 @@ The AACT database uses the `ctgov` schema. Key tables include:
 
 When searching for conditions or interventions, ALWAYS start with the `browse_conditions` and `browse_interventions` tables with their `mesh_term` column. Medical terms are standardized using MeSH (Medical Subject Headings).
 
-Common mappings:
-- "breast cancer" → mesh_term ILIKE '%Breast Neoplasms%'
-- "lung cancer" → mesh_term ILIKE '%Lung Neoplasms%'
-- "diabetes" → mesh_term ILIKE '%Diabetes Mellitus%'
-- "heart disease" → mesh_term ILIKE '%Heart Diseases%'
-- "COVID" or "coronavirus" → mesh_term ILIKE '%COVID-19%'
+Common mappings (use `downcase_mesh_term` with LIKE for speed):
+- "breast cancer" → downcase_mesh_term LIKE '%breast neoplasms%'
+- "lung cancer" → downcase_mesh_term LIKE '%lung neoplasms%'
+- "diabetes" → downcase_mesh_term LIKE '%diabetes mellitus%'
+- "heart disease" → downcase_mesh_term LIKE '%heart diseases%'
+- "COVID" or "coronavirus" → downcase_mesh_term LIKE '%covid-19%'
 
 ## IMPORTANT: Zero Results Fallback (4-Tier Search Strategy)
 
@@ -93,7 +93,7 @@ The `overall_status` column in `studies` uses these values:
 
 1. ALWAYS qualify table names with schema: `ctgov.studies`, `ctgov.browse_conditions`, etc.
 2. Join tables using `nct_id` as the primary key
-3. Use ILIKE for case-insensitive text matching
+3. Use `downcase_mesh_term` / `downcase_name` columns with LIKE for condition/intervention matching (faster than ILIKE on mixed-case columns). Use ILIKE only for columns without a downcase variant (e.g. `brief_title`)
 4. Limit results to {top_k} unless user specifies otherwise
 5. NEVER use DML statements (INSERT, UPDATE, DELETE, DROP)
 6. For counts, use COUNT(DISTINCT nct_id) to avoid duplicates from joins
@@ -105,7 +105,7 @@ Q: "How many lung cancer trials are recruiting?"
 SELECT COUNT(DISTINCT s.nct_id)
 FROM ctgov.studies s
 JOIN ctgov.browse_conditions bc ON s.nct_id = bc.nct_id
-WHERE bc.mesh_term ILIKE '%Lung Neoplasms%'
+WHERE bc.downcase_mesh_term LIKE '%lung neoplasms%'
 AND s.overall_status = 'Recruiting';
 ```
 
@@ -115,7 +115,7 @@ SELECT s.nct_id, s.brief_title, s.overall_status
 FROM ctgov.studies s
 JOIN ctgov.browse_conditions bc ON s.nct_id = bc.nct_id
 JOIN ctgov.sponsors sp ON s.nct_id = sp.nct_id
-WHERE bc.mesh_term ILIKE '%Diabetes Mellitus%'
+WHERE bc.downcase_mesh_term LIKE '%diabetes mellitus%'
 AND s.phase ILIKE '%Phase 3%'
 AND sp.name ILIKE '%Pfizer%'
 LIMIT {top_k};

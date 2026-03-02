@@ -54,7 +54,10 @@ async def search_ctgov(
             if page_token:
                 request_params["pageToken"] = page_token
 
-            logger.info(f"ClinicalTrials.gov API request: {request_params}")
+            logger.info(
+                "ClinicalTrials.gov API request: params=%s",
+                list(request_params.keys()),
+            )
 
             response = await client.get(CTGOV_API_BASE, params=request_params)
             response.raise_for_status()

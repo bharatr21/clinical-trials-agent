@@ -1,5 +1,8 @@
 """SQL tools setup for the agent."""
 
+import logging
+import re
+
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_openai import ChatOpenAI
@@ -7,6 +10,10 @@ from langchain_openai import ChatOpenAI
 from clinical_trials_agent.agent.ctgov_api import search_ctgov
 from clinical_trials_agent.config import get_settings
 from clinical_trials_agent.database import get_database
+
+logger = logging.getLogger(__name__)
+
+_NCT_ID_PATTERN = re.compile(r"^NCT\d{8}$")
 
 
 def get_sql_tools() -> list[BaseTool]:
@@ -56,15 +63,24 @@ async def _search_clinicaltrials_api(
     if not result["nct_ids"]:
         return "No results found on ClinicalTrials.gov API either."
 
-    nct_list = ", ".join(f"'{nct}'" for nct in result["nct_ids"])
+    # Validate NCT IDs to prevent SQL injection via crafted API responses
+    valid_ids = [nct for nct in result["nct_ids"] if _NCT_ID_PATTERN.match(nct)]
+    invalid_count = len(result["nct_ids"]) - len(valid_ids)
+    if invalid_count:
+        logger.warning("Filtered %d invalid NCT IDs from API response", invalid_count)
+    if not valid_ids:
+        return "No valid NCT IDs returned from ClinicalTrials.gov API."
+
+    nct_list = ", ".join(f"'{nct}'" for nct in valid_ids)
     truncation_note = ""
     if result["was_truncated"]:
         truncation_note = (
-            f" (showing {len(result['nct_ids'])} of {result['total_count']} total)"
+            f" (showing {len(valid_ids)} of {result['total_count']} total)"
         )
 
     return (
-        f"ClinicalTrials.gov API found {result['total_count']} studies{truncation_note}.\n"
+        f"ClinicalTrials.gov API found {result['total_count']} studies{truncation_note} "
+        f"({len(valid_ids)} valid IDs).\n"
         f"Use these NCT IDs in your SQL query: WHERE s.nct_id IN ({nct_list})"
     )
 
