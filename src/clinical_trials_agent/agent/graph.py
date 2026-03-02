@@ -16,7 +16,11 @@ from clinical_trials_agent.agent.nodes import (
     create_list_tables_node,
     create_topic_guardrail_node,
 )
-from clinical_trials_agent.agent.tools import get_sql_tools, get_tool_by_name
+from clinical_trials_agent.agent.tools import (
+    get_ctgov_search_tool,
+    get_sql_tools,
+    get_tool_by_name,
+)
 from clinical_trials_agent.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -76,41 +80,54 @@ def get_checkpointer() -> AsyncPostgresSaver | None:
     return _checkpointer
 
 
-class AgentState(MessagesState):
-    """Extended state that includes guardrail flags."""
-
-    guardrail_block: bool = False
-    sql_validation_failed: bool = False
-
-
 def should_continue_after_guardrail(
-    state: AgentState,
+    state: MessagesState,
 ) -> Literal["list_tables", "__end__"]:
-    """Route after topic guardrail: proceed or short-circuit."""
-    if state.get("guardrail_block"):
+    """Route after topic guardrail: proceed or short-circuit.
+
+    The topic_guardrail node is the first node after START. If it blocked the
+    query (off-topic or injection), it appended an AIMessage. If it passed,
+    the last message is still the user's HumanMessage. We check message type
+    instead of a state flag to avoid stickiness across checkpointed turns.
+    """
+    last_message = state["messages"][-1]
+    # If the guardrail appended a response, the last message is an AIMessage
+    if hasattr(last_message, "type") and last_message.type == "ai":
         return END
     return "list_tables"
 
 
 def should_continue_after_check(
-    state: AgentState,
+    state: MessagesState,
 ) -> Literal["run_query", "generate_query"]:
-    """Route after check_query: run the query or retry generation on validation failure."""
-    if state.get("sql_validation_failed"):
-        return "generate_query"
-    return "run_query"
+    """Route after check_query: run the query or retry generation.
+
+    If SQL validation passed, the response has tool_calls (the validated query).
+    If it failed, the response is a plain AIMessage with no tool_calls.
+    """
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "run_query"
+    return "generate_query"
 
 
-def should_continue(state: AgentState) -> Literal["check_query", "__end__"]:
-    """Determine whether to check the query or end the conversation.
+def should_continue(
+    state: MessagesState,
+) -> Literal["check_query", "api_search", "__end__"]:
+    """Determine whether to check the query, search the API, or end.
 
-    If the LLM generated a tool call (SQL query), route to check_query.
-    If no tool call (LLM provided final answer), end the conversation.
+    Routes based on which tool the LLM called:
+    - sql_db_query → check_query (validate SQL before running)
+    - search_clinicaltrials_api → api_search (external API fallback)
+    - no tool call → END (LLM provided final answer)
     """
     messages = state["messages"]
     last_message = messages[-1]
     if not last_message.tool_calls:
         return END
+    tool_name = last_message.tool_calls[0].get("name", "")
+    if tool_name == "search_clinicaltrials_api":
+        return "api_search"
     return "check_query"
 
 
@@ -123,35 +140,37 @@ def _build_agent_graph() -> StateGraph:
                                 ↓ yes
                               list_tables → call_get_schema → get_schema → generate_query
                                                                                 ↓
-                                                                          [has tool call?]
-                                                                           ↓         ↓
-                                                                      check_query    END
-                                                                           ↓
-                                                                     [valid SQL?]
-                                                                      ↓         ↓
-                                                                 run_query   generate_query (retry)
-                                                                           ↓
-                                                                     generate_query
+                                                                          [which tool?]
+                                                                     ↓         ↓           ↓
+                                                                check_query  api_search   END
+                                                                     ↓         ↓
+                                                               [valid SQL?]  generate_query
+                                                                ↓         ↓
+                                                           run_query   generate_query (retry)
+                                                                ↓
+                                                           generate_query
     """
     # Get tools
     tools = get_sql_tools()
     list_tables_tool = get_tool_by_name(tools, "sql_db_list_tables")
     get_schema_tool = get_tool_by_name(tools, "sql_db_schema")
     run_query_tool = get_tool_by_name(tools, "sql_db_query")
+    api_search_tool = get_ctgov_search_tool()
 
     # Create tool nodes
     get_schema_node = ToolNode([get_schema_tool], name="get_schema")
     run_query_node = ToolNode([run_query_tool], name="run_query")
+    api_search_node = ToolNode([api_search_tool], name="api_search")
 
     # Create function nodes
     topic_guardrail = create_topic_guardrail_node()
     list_tables = create_list_tables_node(list_tables_tool)
     call_get_schema = create_call_get_schema_node(get_schema_tool)
-    generate_query = create_generate_query_node(run_query_tool)
+    generate_query = create_generate_query_node(run_query_tool, api_search_tool)
     check_query = create_check_query_node(run_query_tool)
 
     # Build the graph
-    builder = StateGraph(AgentState)
+    builder = StateGraph(MessagesState)
 
     # Add nodes
     builder.add_node("topic_guardrail", topic_guardrail)
@@ -161,6 +180,7 @@ def _build_agent_graph() -> StateGraph:
     builder.add_node("generate_query", generate_query)
     builder.add_node("check_query", check_query)
     builder.add_node(run_query_node, "run_query")
+    builder.add_node(api_search_node, "api_search")
 
     # Add edges
     builder.add_edge(START, "topic_guardrail")
@@ -171,6 +191,7 @@ def _build_agent_graph() -> StateGraph:
     builder.add_conditional_edges("generate_query", should_continue)
     builder.add_conditional_edges("check_query", should_continue_after_check)
     builder.add_edge("run_query", "generate_query")
+    builder.add_edge("api_search", "generate_query")
 
     return builder
 

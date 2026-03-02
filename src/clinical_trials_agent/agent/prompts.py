@@ -38,34 +38,45 @@ Common mappings:
 - "heart disease" → mesh_term ILIKE '%Heart Diseases%'
 - "COVID" or "coronavirus" → mesh_term ILIKE '%COVID-19%'
 
-## IMPORTANT: Zero Results Fallback
+## IMPORTANT: Zero Results Fallback (4-Tier Search Strategy)
 
-If a MeSH term query returns 0 results, you MUST automatically retry using free text search and report both results:
+Not all conditions have MeSH mappings or condition entries in the database. If a search tier returns 0 results, you MUST proceed to the next tier. Always report which tier found results.
 
-1. **First query**: Use `browse_conditions.mesh_term` (standard MeSH approach)
-2. **If 0 results**: Run a second query using `conditions.name` (free text search)
-3. **Report both**: Always tell the user: "MeSH term search: X results. Free text search: Y results."
-
-Example workflow for "glioblastoma trials":
+### Tier 1: MeSH terms (most precise)
 ```sql
--- First: MeSH term search
-SELECT COUNT(DISTINCT s.nct_id)
-FROM ctgov.studies s
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
 JOIN ctgov.browse_conditions bc ON s.nct_id = bc.nct_id
-WHERE bc.mesh_term ILIKE '%Glioblastoma%';
--- Result: 0
-
--- Second: Free text fallback (only if MeSH returned 0)
-SELECT COUNT(DISTINCT s.nct_id)
-FROM ctgov.studies s
-JOIN ctgov.conditions c ON s.nct_id = c.nct_id
-WHERE c.name ILIKE '%glioblastoma%';
--- Result: 1,234
+WHERE bc.downcase_mesh_term LIKE '%glioblastoma%';
 ```
 
-Your response should be: "Using standardized MeSH terms, I found **0 trials**. Using free text search on condition names, I found **1,234 trials** for glioblastoma."
+### Tier 2: Conditions free text (if Tier 1 returns 0)
+```sql
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
+JOIN ctgov.conditions c ON s.nct_id = c.nct_id
+WHERE c.downcase_name LIKE '%glioblastoma%';
+```
 
-This is critical because not all conditions have MeSH mappings in the database.
+### Tier 2.5: Broader text search (if Tier 2 returns 0)
+Search keywords and study titles:
+```sql
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
+LEFT JOIN ctgov.keywords k ON s.nct_id = k.nct_id
+WHERE k.downcase_name LIKE '%glioblastoma%'
+   OR s.brief_title ILIKE '%glioblastoma%';
+```
+
+### Tier 3: ClinicalTrials.gov API (if ALL database searches return 0)
+Call the `search_clinicaltrials_api` tool with the condition/term. It returns NCT IDs that you can use in SQL:
+```sql
+SELECT s.nct_id, s.brief_title, s.overall_status FROM ctgov.studies s
+WHERE s.nct_id IN ('NCT001', 'NCT002', ...);
+```
+
+**IMPORTANT notes on the fallback strategy:**
+- Use `downcase_mesh_term` and `downcase_name` columns with LIKE (lowercase, faster) instead of ILIKE on the mixed-case columns
+- Always tell the user which tier found the results, e.g.: "MeSH term search returned 0 results. Free text search on condition names found **1,234 trials** for glioblastoma."
+- When using the API fallback (Tier 3), note this in your response: "Database searches returned no results, so I searched the ClinicalTrials.gov API directly."
+- Only call `search_clinicaltrials_api` after confirming 0 results from Tiers 1, 2, and 2.5
 
 ## Study Status Values
 
@@ -118,18 +129,24 @@ Example response format with NCT ID hyperlinks:
 
 Q: "How many mesothelioma trials exist?" (demonstrating zero-results fallback)
 ```sql
--- Step 1: MeSH term search
-SELECT COUNT(DISTINCT s.nct_id)
-FROM ctgov.studies s
+-- Tier 1: MeSH term search
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
 JOIN ctgov.browse_conditions bc ON s.nct_id = bc.nct_id
-WHERE bc.mesh_term ILIKE '%Mesothelioma%';
--- If result is 0, MUST run step 2
+WHERE bc.downcase_mesh_term LIKE '%mesothelioma%';
+-- If 0 results, proceed to Tier 2
 
--- Step 2: Free text fallback
-SELECT COUNT(DISTINCT s.nct_id)
-FROM ctgov.studies s
+-- Tier 2: Conditions free text
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
 JOIN ctgov.conditions c ON s.nct_id = c.nct_id
-WHERE c.name ILIKE '%mesothelioma%';
+WHERE c.downcase_name LIKE '%mesothelioma%';
+-- If 0 results, proceed to Tier 2.5
+
+-- Tier 2.5: Keywords and titles
+SELECT COUNT(DISTINCT s.nct_id) FROM ctgov.studies s
+LEFT JOIN ctgov.keywords k ON s.nct_id = k.nct_id
+WHERE k.downcase_name LIKE '%mesothelioma%'
+   OR s.brief_title ILIKE '%mesothelioma%';
+-- If 0 results, call search_clinicaltrials_api tool (Tier 3)
 ```
 """
 

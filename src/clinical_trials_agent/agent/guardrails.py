@@ -36,7 +36,7 @@ OFF_TOPIC_RESPONSE = (
     "I'm a clinical trials research assistant and can only help with questions "
     "about clinical trials, medical research, treatments, and health conditions. "
     "Could you ask me something about clinical trials instead? For example:\n\n"
-    '- "How many breast cancer trials are currently recruiting?"\n'
+    '- "How many diabetes trials are currently recruiting?"\n'
     '- "What phase 3 diabetes trials are sponsored by Pfizer?"\n'
     '- "Show me COVID-19 vaccine trials completed in 2023"'
 )

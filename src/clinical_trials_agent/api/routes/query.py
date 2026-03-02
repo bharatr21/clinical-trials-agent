@@ -198,6 +198,7 @@ STAGE_LABELS = {
     "generate_query": "Generating response",
     "check_query": "Validating SQL query",
     "run_query": "Executing SQL query",
+    "api_search": "Searching ClinicalTrials.gov API",
 }
 
 
@@ -328,11 +329,11 @@ async def query_clinical_trials_stream(
                                 )
                                 yield f"data: {json.dumps({'type': 'sql', 'query': sql_query})}\n\n"
 
-                # Stream content tokens (only from final answer, not intermediate messages)
+                # Stream content tokens from the final answer or guardrail response
                 if (
                     hasattr(msg_chunk, "content")
                     and msg_chunk.content
-                    and node == "generate_query"
+                    and node in ("generate_query", "topic_guardrail")
                     and not getattr(msg_chunk, "tool_calls", None)
                 ):
                     answer_tokens.append(msg_chunk.content)
