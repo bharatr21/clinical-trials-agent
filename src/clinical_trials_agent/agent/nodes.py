@@ -168,15 +168,17 @@ def create_topic_guardrail_node():
             )
 
         response = _invoke_with_fallback(invoke_llm, config)
-        classification = response.content.strip().strip(".").lower()
+        raw_classification = response.content.strip().strip(".").lower()
+        # Extract first token for exact match — reject ambiguous outputs
+        first_token = raw_classification.split()[0] if raw_classification else ""
         logger.info(
             "Topic classification: '%s' (msg_hash=%s, len=%d)",
-            classification,
+            first_token,
             msg_fingerprint,
             len(user_message),
         )
 
-        if not classification.startswith("yes"):
+        if first_token != "yes":
             logger.info("Off-topic query blocked by guardrail")
             return {
                 "messages": [AIMessage(content=OFF_TOPIC_RESPONSE)],
