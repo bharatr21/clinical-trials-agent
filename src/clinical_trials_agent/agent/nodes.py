@@ -1,5 +1,6 @@
 """Node functions for the LangGraph agent."""
 
+import hashlib
 import logging
 
 from langchain_core.messages import AIMessage
@@ -10,6 +11,14 @@ from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph import MessagesState
 
+from clinical_trials_agent.agent.guardrails import (
+    INJECTION_DETECTED_RESPONSE,
+    OFF_TOPIC_RESPONSE,
+    TOPIC_CLASSIFIER_PROMPT,
+    SQLValidationError,
+    detect_prompt_injection,
+    validate_sql_query,
+)
 from clinical_trials_agent.agent.prompts import (
     CHECK_QUERY_SYSTEM_PROMPT,
     GENERATE_QUERY_SYSTEM_PROMPT,
@@ -106,6 +115,81 @@ def _invoke_with_fallback(llm_func, config: RunnableConfig | None = None):
         raise
 
 
+def create_topic_guardrail_node():
+    """Create a node that checks if the user's question is on-topic.
+
+    This runs before the main pipeline. It:
+    1. Checks for prompt injection patterns (deterministic, fast)
+    2. Classifies whether the question is about clinical trials (LLM call)
+
+    If off-topic or injection detected, appends an AIMessage so the
+    downstream router (which checks last message type) short-circuits to END.
+    If on-topic, returns nothing — the last message stays as the user's
+    HumanMessage and the router proceeds to list_tables.
+    """
+
+    def topic_guardrail(state: MessagesState, config: RunnableConfig) -> dict:
+        # Find the latest user message
+        user_message = ""
+        for msg in reversed(state["messages"]):
+            if hasattr(msg, "type") and msg.type == "human":
+                user_message = msg.content
+                break
+            elif isinstance(msg, dict) and msg.get("role") == "user":
+                user_message = msg["content"]
+                break
+
+        if not user_message:
+            return {}
+
+        msg_fingerprint = hashlib.sha256(user_message.encode()).hexdigest()[:12]
+
+        # Fast check: prompt injection detection (no LLM needed)
+        if detect_prompt_injection(user_message):
+            logger.warning(
+                "Prompt injection blocked (msg_hash=%s, len=%d)",
+                msg_fingerprint,
+                len(user_message),
+            )
+            return {
+                "messages": [AIMessage(content=INJECTION_DETECTED_RESPONSE)],
+            }
+
+        # LLM-based topic classification
+        logger.info("Node: topic_guardrail - Classifying user intent")
+
+        def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
+            return llm.invoke(
+                [
+                    {"role": "system", "content": TOPIC_CLASSIFIER_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+                config={"callbacks": callbacks, "metadata": metadata},
+            )
+
+        response = _invoke_with_fallback(invoke_llm, config)
+        raw_classification = response.content.strip().strip(".").lower()
+        # Extract first token for exact match — reject ambiguous outputs
+        first_token = raw_classification.split()[0] if raw_classification else ""
+        logger.info(
+            "Topic classification: '%s' (msg_hash=%s, len=%d)",
+            first_token,
+            msg_fingerprint,
+            len(user_message),
+        )
+
+        if first_token != "yes":
+            logger.info("Off-topic query blocked by guardrail")
+            return {
+                "messages": [AIMessage(content=OFF_TOPIC_RESPONSE)],
+            }
+
+        # On-topic: return nothing, last message stays as the user's HumanMessage
+        return {}
+
+    return topic_guardrail
+
+
 def create_list_tables_node(list_tables_tool: BaseTool):
     """Create a node that lists available database tables."""
 
@@ -153,8 +237,15 @@ def create_call_get_schema_node(get_schema_tool: BaseTool):
     return call_get_schema
 
 
-def create_generate_query_node(run_query_tool: BaseTool, top_k: int = 10):
+def create_generate_query_node(
+    run_query_tool: BaseTool,
+    api_search_tool: BaseTool | None = None,
+    top_k: int = 10,
+):
     """Create a node that generates SQL queries."""
+    bound_tools = [run_query_tool]
+    if api_search_tool:
+        bound_tools.append(api_search_tool)
 
     def generate_query(state: MessagesState, config: RunnableConfig) -> dict:
         """Generate a SQL query based on the user's question and schema."""
@@ -168,7 +259,7 @@ def create_generate_query_node(run_query_tool: BaseTool, top_k: int = 10):
         logger.debug(f"System prompt: {system_prompt[:500]}...")
 
         def invoke_llm(llm: ChatOpenAI, callbacks: list, metadata: dict):
-            llm_with_tools = llm.bind_tools([run_query_tool])
+            llm_with_tools = llm.bind_tools(bound_tools)
             return llm_with_tools.invoke(
                 [system_message, *state["messages"]],
                 config={"callbacks": callbacks, "metadata": metadata},
@@ -176,11 +267,11 @@ def create_generate_query_node(run_query_tool: BaseTool, top_k: int = 10):
 
         response = _invoke_with_fallback(invoke_llm, config)
         if response.tool_calls:
-            logger.info(
-                f"Generated SQL: {response.tool_calls[0].get('args', {}).get('query', 'N/A')}"
-            )
+            tool_name = response.tool_calls[0].get("name", "N/A")
+            arg_keys = list(response.tool_calls[0].get("args", {}).keys())
+            logger.info("Tool call: %s, arg_keys: %s", tool_name, arg_keys)
         else:
-            logger.info(f"LLM response (no tool call): {response.content[:200]}...")
+            logger.info("LLM response (no tool call), length=%d", len(response.content))
         return {"messages": [response]}
 
     return generate_query
@@ -221,6 +312,24 @@ def create_check_query_node(run_query_tool: BaseTool):
                 logger.info(f"Query modified by checker: {validated_query}")
             else:
                 logger.debug("Query validated without changes")
+
+            # Deterministic SQL guardrail: validate before execution
+            try:
+                validate_sql_query(validated_query)
+            except SQLValidationError as e:
+                logger.warning(f"SQL guardrail blocked query: {e}")
+                # Replace the tool call with a plain AIMessage (no tool_calls)
+                # so the router sends back to generate_query instead of run_query
+                return {
+                    "messages": [
+                        AIMessage(
+                            content=f"I'm unable to execute that query because it "
+                            f"failed a safety check: {e}. Let me try a different "
+                            f"approach.",
+                            id=state["messages"][-1].id,
+                        )
+                    ],
+                }
 
         return {"messages": [response]}
 

@@ -27,9 +27,9 @@ class TestGenerateQueryPrompt:
         assert "browse_conditions" in GENERATE_QUERY_SYSTEM_PROMPT
 
     def test_prompt_contains_breast_cancer_mapping(self):
-        """Prompt should contain breast cancer to Breast Neoplasms mapping."""
+        """Prompt should contain breast cancer to breast neoplasms mapping."""
         assert "breast cancer" in GENERATE_QUERY_SYSTEM_PROMPT.lower()
-        assert "Breast Neoplasms" in GENERATE_QUERY_SYSTEM_PROMPT
+        assert "breast neoplasms" in GENERATE_QUERY_SYSTEM_PROMPT.lower()
 
     def test_prompt_contains_status_values(self):
         """Prompt should document study status values."""

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import AIMessage, AIMessageChunk
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -191,12 +192,14 @@ async def query_clinical_trials(
 
 # Human-readable stage names for the LangGraph nodes
 STAGE_LABELS = {
+    "topic_guardrail": "Checking query relevance",
     "list_tables": "Discovering database tables",
     "call_get_schema": "Selecting relevant tables",
     "get_schema": "Loading table schemas",
     "generate_query": "Generating response",
     "check_query": "Validating SQL query",
     "run_query": "Executing SQL query",
+    "api_search": "Searching ClinicalTrials.gov API",
 }
 
 
@@ -327,12 +330,21 @@ async def query_clinical_trials_stream(
                                 )
                                 yield f"data: {json.dumps({'type': 'sql', 'query': sql_query})}\n\n"
 
-                # Stream content tokens (only from final answer, not intermediate messages)
+                # Stream content tokens from the final answer or guardrail
+                # rejection. For topic_guardrail, only stream complete AIMessages
+                # (canned rejection), not AIMessageChunks (classifier "yes"/"no").
                 if (
                     hasattr(msg_chunk, "content")
                     and msg_chunk.content
-                    and node == "generate_query"
                     and not getattr(msg_chunk, "tool_calls", None)
+                    and (
+                        node == "generate_query"
+                        or (
+                            node == "topic_guardrail"
+                            and isinstance(msg_chunk, AIMessage)
+                            and not isinstance(msg_chunk, AIMessageChunk)
+                        )
+                    )
                 ):
                     answer_tokens.append(msg_chunk.content)
                     yield f"data: {json.dumps({'type': 'token', 'content': msg_chunk.content})}\n\n"
