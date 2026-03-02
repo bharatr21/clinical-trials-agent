@@ -268,11 +268,10 @@ def create_generate_query_node(
         response = _invoke_with_fallback(invoke_llm, config)
         if response.tool_calls:
             tool_name = response.tool_calls[0].get("name", "N/A")
-            logger.info(
-                f"Tool call: {tool_name}, args: {response.tool_calls[0].get('args', {})}"
-            )
+            arg_keys = list(response.tool_calls[0].get("args", {}).keys())
+            logger.info("Tool call: %s, arg_keys: %s", tool_name, arg_keys)
         else:
-            logger.info(f"LLM response (no tool call): {response.content[:200]}...")
+            logger.info("LLM response (no tool call), length=%d", len(response.content))
         return {"messages": [response]}
 
     return generate_query
