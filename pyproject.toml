@@ -20,7 +20,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "slowapi>=0.1.9",
-    "langfuse>=2.0.0",
+    "langfuse>=3.0.0",
     "sqlparse>=0.5.0",
     "httpx>=0.28.0",
 ]
