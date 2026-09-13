@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, AIMessageChunk
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import select
 
 from clinical_trials_agent.agent import create_agent
+from clinical_trials_agent.agent.tracing import get_langfuse_config
 from clinical_trials_agent.api.dependencies import get_client_id, get_openai_api_key
 from clinical_trials_agent.api.rate_limit import limiter
 from clinical_trials_agent.database import get_app_db_session
@@ -146,11 +147,7 @@ async def query_clinical_trials(
         )
 
         agent = create_agent()
-        config: dict = {
-            "configurable": {"thread_id": conversation_id, "client_id": client_id}
-        }
-        if openai_api_key:
-            config["configurable"]["openai_api_key"] = openai_api_key
+        config = _build_agent_config(conversation_id, client_id, openai_api_key)
 
         # Run the agent (async invocation with checkpointer)
         result = await agent.ainvoke(
@@ -188,6 +185,18 @@ async def query_clinical_trials(
             status_code=500,
             detail="An error occurred while processing your question. Please try again.",
         ) from e
+
+
+def _build_agent_config(
+    conversation_id: str, client_id: str, openai_api_key: str | None
+) -> dict:
+    """Build the graph run config, with Langfuse tracing attached at the root."""
+    configurable: dict = {"thread_id": conversation_id, "client_id": client_id}
+    if openai_api_key:
+        # SecretStr, not str: LangChain copies primitive configurable values
+        # into run metadata, which the tracer would send to Langfuse.
+        configurable["openai_api_key"] = SecretStr(openai_api_key)
+    return {"configurable": configurable, **get_langfuse_config(configurable)}
 
 
 # Human-readable stage names for the LangGraph nodes
@@ -237,11 +246,7 @@ async def query_clinical_trials_stream(
     async def generate():
         try:
             agent = create_agent()
-            config: dict = {
-                "configurable": {"thread_id": conversation_id, "client_id": client_id}
-            }
-            if openai_api_key:
-                config["configurable"]["openai_api_key"] = openai_api_key
+            config = _build_agent_config(conversation_id, client_id, openai_api_key)
 
             answer_tokens: list[str] = []
             sql_query: str | None = None

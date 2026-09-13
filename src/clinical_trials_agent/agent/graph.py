@@ -50,10 +50,26 @@ async def init_checkpointer() -> AsyncPostgresSaver:
             await temp_checkpointer.setup()
             logger.info("LangGraph checkpoint tables created")
 
-        # Create connection pool for runtime use
+        # Create connection pool for runtime use.
+        # The managed Postgres (or its proxy) drops idle connections, so
+        # validate connections on checkout, recycle idle/old ones, and enable
+        # TCP keepalives. Otherwise the pool hands out dead connections and the
+        # first checkpointer read fails with "server closed the connection".
         _pool = AsyncConnectionPool(
             conninfo=settings.app_database_url,
             open=False,
+            check=AsyncConnectionPool.check_connection,
+            max_idle=60,
+            max_lifetime=30 * 60,
+            reconnect_timeout=60,
+            kwargs={
+                "autocommit": True,
+                "prepare_threshold": 0,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 3,
+            },
         )
         await _pool.open()
 

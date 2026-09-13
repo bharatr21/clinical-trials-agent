@@ -1,5 +1,6 @@
 """FastAPI application for the clinical trials agent."""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 
 from clinical_trials_agent.agent import close_checkpointer, init_checkpointer
+from clinical_trials_agent.agent.tracing import shutdown_langfuse
 from clinical_trials_agent.api.rate_limit import limiter
 from clinical_trials_agent.api.routes import conversations_router, query_router
 from clinical_trials_agent.config import get_settings
@@ -51,6 +53,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     logger.info("Shutting down application...")
     await close_checkpointer()
     await close_app_database()
+    # Flush batched spans so traces from in-flight requests aren't lost on redeploy
+    await asyncio.to_thread(shutdown_langfuse)
     logger.info("Application shutdown complete")
 
 
