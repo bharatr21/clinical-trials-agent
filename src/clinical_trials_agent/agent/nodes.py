@@ -3,7 +3,7 @@
 import hashlib
 import logging
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
@@ -71,6 +71,41 @@ def _invoke_with_fallback(llm_func, config: RunnableConfig | None = None):
     except RateLimitError:
         logger.error("Server API key rate limited and no user key available")
         raise
+
+
+INTERRUPTED_TOOL_CALL_CONTENT = "Tool call was interrupted and did not complete."
+
+
+def repair_dangling_tool_calls(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Give every unanswered tool call a placeholder ToolMessage.
+
+    A run that aborts between an LLM tool call and its tool execution (client
+    disconnect, recursion limit, exception) checkpoints an AIMessage whose
+    tool calls have no responses. OpenAI rejects any later request containing
+    that history, which would break the conversation permanently. This returns
+    a copy for the LLM request; checkpointed state is left untouched.
+    """
+    answered = {m.tool_call_id for m in messages if isinstance(m, ToolMessage)}
+    repaired: list[AnyMessage] = []
+    pending: list[str] = []
+
+    def flush_pending() -> None:
+        repaired.extend(
+            ToolMessage(content=INTERRUPTED_TOOL_CALL_CONTENT, tool_call_id=call_id)
+            for call_id in pending
+        )
+        pending.clear()
+
+    for msg in messages:
+        # Tool responses must directly follow their AIMessage, so insert
+        # placeholders once the run of tool messages ends.
+        if pending and not isinstance(msg, ToolMessage):
+            flush_pending()
+        repaired.append(msg)
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            pending = [tc["id"] for tc in msg.tool_calls if tc["id"] not in answered]
+    flush_pending()
+    return repaired
 
 
 def create_topic_guardrail_node():
@@ -183,7 +218,9 @@ def create_call_get_schema_node(get_schema_tool: BaseTool):
 
         def invoke_llm(llm: ChatOpenAI):
             llm_with_tools = llm.bind_tools([get_schema_tool], tool_choice="any")
-            return llm_with_tools.invoke(state["messages"], config)
+            return llm_with_tools.invoke(
+                repair_dangling_tool_calls(state["messages"]), config
+            )
 
         response = _invoke_with_fallback(invoke_llm, config)
         logger.debug(f"LLM response tool calls: {response.tool_calls}")
@@ -215,7 +252,10 @@ def create_generate_query_node(
 
         def invoke_llm(llm: ChatOpenAI):
             llm_with_tools = llm.bind_tools(bound_tools)
-            return llm_with_tools.invoke([system_message, *state["messages"]], config)
+            return llm_with_tools.invoke(
+                [system_message, *repair_dangling_tool_calls(state["messages"])],
+                config,
+            )
 
         response = _invoke_with_fallback(invoke_llm, config)
         if response.tool_calls:
