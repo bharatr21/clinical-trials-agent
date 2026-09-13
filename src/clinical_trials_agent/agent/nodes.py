@@ -183,9 +183,11 @@ def create_topic_guardrail_node():
     return topic_guardrail
 
 
-# Prefix of the pipeline's table-list AIMessage. It is LLM context, not an
-# answer, so the conversation history endpoint hides messages starting with it.
 TABLE_LIST_PREFIX = "Available tables in the AACT database: "
+LIST_TABLES_CALL_ID = "list_tables_call"
+# response_metadata flag on the table-list AIMessage. It is LLM context, not an
+# answer, so the conversation history endpoint hides it. Not sent to OpenAI.
+INTERNAL_MESSAGE_KEY = "internal"
 
 
 def create_list_tables_node(list_tables_tool: BaseTool):
@@ -197,13 +199,16 @@ def create_list_tables_node(list_tables_tool: BaseTool):
         tool_call = {
             "name": "sql_db_list_tables",
             "args": {},
-            "id": "list_tables_call",
+            "id": LIST_TABLES_CALL_ID,
             "type": "tool_call",
         }
         tool_call_message = AIMessage(content="", tool_calls=[tool_call])
         tool_message = list_tables_tool.invoke(tool_call)
         logger.debug(f"Available tables: {tool_message.content}")
-        response = AIMessage(content=f"{TABLE_LIST_PREFIX}{tool_message.content}")
+        response = AIMessage(
+            content=f"{TABLE_LIST_PREFIX}{tool_message.content}",
+            response_metadata={INTERNAL_MESSAGE_KEY: True},
+        )
         return {"messages": [tool_call_message, tool_message, response]}
 
     return list_tables
