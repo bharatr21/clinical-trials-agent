@@ -8,6 +8,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, desc, func, select
 
 from clinical_trials_agent.agent import create_agent
+from clinical_trials_agent.agent.nodes import (
+    INTERNAL_MESSAGE_KEY,
+    LIST_TABLES_CALL_ID,
+)
 from clinical_trials_agent.api.dependencies import get_client_id
 from clinical_trials_agent.database import get_app_db_session
 from clinical_trials_agent.models import Conversation
@@ -77,6 +81,35 @@ def _format_message(message) -> MessageResponse:
         content=content,
         tool_calls=tool_calls,
     )
+
+
+def _visible_messages(raw_messages: list) -> list[MessageResponse]:
+    """Format checkpointed messages, dropping pipeline internals.
+
+    Tool messages and the table-list AIMessage are LLM context only. The
+    table-list message would otherwise show as the reply to any turn that
+    failed before the final answer. AI messages with tool_calls are kept so
+    the UI can attach the SQL query to the answer.
+    """
+    messages: list[MessageResponse] = []
+    previous = None
+    for msg in raw_messages:
+        is_internal = getattr(msg, "response_metadata", {}).get(INTERNAL_MESSAGE_KEY)
+        # Checkpoints saved before the flag existed: the table-list message is
+        # the AIMessage directly after the list_tables tool response.
+        follows_list_tables = (
+            getattr(previous, "type", None) == "tool"
+            and previous.tool_call_id == LIST_TABLES_CALL_ID
+        )
+        previous = msg
+        formatted = _format_message(msg)
+        if formatted.role == "tool":
+            continue
+        if formatted.role == "assistant" and (is_internal or follows_list_tables):
+            continue
+        if formatted.content.strip() or formatted.tool_calls:
+            messages.append(formatted)
+    return messages
 
 
 @router.get("", response_model=ConversationListResponse)
@@ -168,14 +201,7 @@ async def get_conversation(
 
     messages: list[MessageResponse] = []
     if state and state.values:
-        raw_messages = state.values.get("messages", [])
-        for msg in raw_messages:
-            formatted = _format_message(msg)
-            # Skip tool messages and empty messages (but keep AI messages with tool_calls)
-            if formatted.role == "tool":
-                continue
-            if formatted.content.strip() or formatted.tool_calls:
-                messages.append(formatted)
+        messages = _visible_messages(state.values.get("messages", []))
 
     return ConversationDetail(
         id=conversation_id,
